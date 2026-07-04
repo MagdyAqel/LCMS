@@ -32,6 +32,9 @@ export type TeacherProfile = {
   fullName: string;
   nationalId: string;
   birthDate: string;
+  gradeId: string;
+  track?: string;
+  teachingSubjects: string[];
   specializationId: string;
   whatsappNumber: string;
   email: string;

@@ -14,6 +14,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { getSubjectsForGrade } from "../data/curriculumCatalog";
 import type { AppUser } from "../types";
 import { getDemoUsers, isDemoUser } from "./demoAuth";
 
@@ -64,6 +65,14 @@ const LOCAL_RECORDS_KEY = "lcms.demo.records";
 
 type LocalStore = Record<string, AppRecord[]>;
 
+const demoTeacherAssignments = [
+  { gradeId: "1", track: "", subjectCount: 3 },
+  { gradeId: "4", track: "", subjectCount: 3 },
+  { gradeId: "7", track: "", subjectCount: 4 },
+  { gradeId: "11", track: "scientific", subjectCount: 4 },
+  { gradeId: "12", track: "humanities", subjectCount: 4 },
+];
+
 function nowStamp() {
   return new Date().toISOString();
 }
@@ -71,22 +80,33 @@ function nowStamp() {
 function demoTeachers() {
   return getDemoUsers()
     .filter((user) => user.role === "teacher")
-    .map((user, index) => ({
-      id: user.uid,
-      teacherId: user.uid,
-      userId: user.uid,
-      username: user.username,
-      fullName: user.displayName,
-      nationalId: `T-${String(index + 1).padStart(3, "0")}`,
-      birthDate: "",
-      specializationId: "",
-      whatsappNumber: "",
-      email: user.contactEmail ?? "",
-      status: "active",
-      createdBy: "demo-admin01",
-      createdAt: nowStamp(),
-      updatedAt: nowStamp(),
-    }));
+    .map((user, index) => {
+      const assignment =
+        demoTeacherAssignments[index % demoTeacherAssignments.length];
+
+      return {
+        id: user.uid,
+        teacherId: user.uid,
+        userId: user.uid,
+        username: user.username,
+        fullName: user.displayName,
+        nationalId: `T-${String(index + 1).padStart(3, "0")}`,
+        birthDate: "",
+        gradeId: assignment.gradeId,
+        track: assignment.track,
+        teachingSubjects: getSubjectsForGrade(
+          assignment.gradeId,
+          assignment.track,
+        ).slice(0, assignment.subjectCount),
+        specializationId: "",
+        whatsappNumber: "",
+        email: user.contactEmail ?? "",
+        status: "active",
+        createdBy: "demo-admin01",
+        createdAt: nowStamp(),
+        updatedAt: nowStamp(),
+      };
+    });
 }
 
 function demoStudents() {
