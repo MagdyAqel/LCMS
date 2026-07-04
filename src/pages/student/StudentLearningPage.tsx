@@ -66,6 +66,7 @@ export function StudentLearningPage({ view }: { view: string }) {
   const [track, setTrack] = useState(trackParam ?? "");
   const [notifications, setNotifications] = useState<AppRecord[]>([]);
   const [messages, setMessages] = useState<AppRecord[]>([]);
+  const [activeSubject, setActiveSubject] = useState(subjectParam ?? "");
   const [messageSubject, setMessageSubject] = useState("");
   const [message, setMessage] = useState("");
   const [receiverId, setReceiverId] = useState("");
@@ -75,8 +76,8 @@ export function StudentLearningPage({ view }: { view: string }) {
     () => getSubjectsForGrade(gradeId, showTrack ? track : ""),
     [gradeId, showTrack, track],
   );
-  const selectedSubject = subjectParam ?? subjects[0] ?? "";
-  const lessonsByGrade = useCollectionByField("lessons", "gradeId", gradeParam);
+  const selectedSubject = subjectParam ?? activeSubject ?? subjects[0] ?? "";
+  const lessonsByGrade = useCollectionByField("lessons", "gradeId", gradeId);
   const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", lessonId);
   const quizzes = useCollectionByField("quizzes", "lessonId", lessonId);
   const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
@@ -87,6 +88,17 @@ export function StudentLearningPage({ view }: { view: string }) {
       setTrack("");
     }
   }, [showTrack]);
+
+  useEffect(() => {
+    if (!subjects.length) {
+      setActiveSubject("");
+      return;
+    }
+
+    if (!subjects.includes(selectedSubject)) {
+      setActiveSubject(subjects[0]);
+    }
+  }, [selectedSubject, subjects]);
 
   useEffect(() => {
     if (gradeParam) {
@@ -150,11 +162,11 @@ export function StudentLearningPage({ view }: { view: string }) {
           const lessonTrack = String(lesson.track ?? "");
           return (
             lessonSubject === selectedSubject &&
-            (!requiresTrack(gradeParam) || lessonTrack === (trackParam ?? ""))
+            (!requiresTrack(gradeId) || lessonTrack === track)
           );
         })
         .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
-    [gradeParam, lessonsByGrade, selectedSubject, trackParam],
+    [gradeId, lessonsByGrade, selectedSubject, track],
   );
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -322,7 +334,7 @@ export function StudentLearningPage({ view }: { view: string }) {
     );
   }
 
-  if (view === "course-detail") {
+  if (false && view === "course-detail") {
     return (
       <StudentShell title={selectedSubject || "?????? ???????"} subtitle="???? ??????? ???????? ????? ???????.">
         <div className="space-y-3">
@@ -382,15 +394,56 @@ export function StudentLearningPage({ view }: { view: string }) {
               </div>
               <BookOpen className="text-learning-blue" size={26} />
             </div>
-            <Link
+            <button
               className="btn-primary mt-5"
-              to={`/student/course-detail?gradeId=${gradeId}&track=${encodeURIComponent(showTrack ? track : "")}&subject=${encodeURIComponent(item)}`}
+              type="button"
+              onClick={() => setActiveSubject(item)}
             >
               ???? ???????
-            </Link>
+            </button>
           </article>
         ))}
       </div>
+
+      {selectedSubject ? (
+        <section className="space-y-3">
+          <div className="surface p-5">
+            <p className="text-xs font-bold text-learning-blue">?????? ???????</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">
+              {selectedSubject}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {subjectLessons.length} ??? ????? ???? ???????.
+            </p>
+          </div>
+
+          {subjectLessons.map((lesson) => (
+            <article
+              key={lesson.id}
+              className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="text-xs font-bold text-slate-400">
+                  ????? {formatCellValue(lesson.order)}
+                </p>
+                <h3 className="mt-1 text-lg font-black text-slate-950">
+                  {formatCellValue(lesson.title)}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {formatCellValue(lesson.objectives ?? "????? ???? ????.")}
+                </p>
+              </div>
+              <Link className="btn-primary" to={`/student/lesson?lessonId=${lesson.id}`}>
+                ??? ?????
+              </Link>
+            </article>
+          ))}
+
+          {!subjectLessons.length ? (
+            <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." />
+          ) : null}
+        </section>
+      ) : null}
       {!subjects.length ? <EmptyState text="???? ?????? ???? ????? ????." /> : null}
     </StudentShell>
   );

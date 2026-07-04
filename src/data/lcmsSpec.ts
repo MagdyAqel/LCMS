@@ -304,7 +304,7 @@ export const teacherModules: SpecModule[] = allTeacherModules
       : module,
   );
 
-export const studentModules: SpecModule[] = [
+const allStudentModules: SpecModule[] = [
   {
     path: "/student/courses",
     title: "??????? ???????",
@@ -378,6 +378,12 @@ export const studentModules: SpecModule[] = [
     actions: ["??? ????????", "??? ????? ?? ??????"],
   },
 ];
+
+const hiddenStudentModulePaths = new Set(["/student/course-detail"]);
+
+export const studentModules: SpecModule[] = allStudentModules.filter(
+  (module) => !hiddenStudentModulePaths.has(module.path),
+);
 
 const rawRoleNavigation: Record<UserRole, NavGroup[]> = {
   admin: [
