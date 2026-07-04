@@ -20,7 +20,12 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
-import { getStageCatalog, gradeOptions, trackOptions } from "../data/curriculumCatalog";
+import {
+  getStageCatalog,
+  gradeOptions,
+  requiresTrack,
+  trackOptions,
+} from "../data/curriculumCatalog";
 import type { FormField, ModuleConfig } from "../data/moduleConfigs";
 import { getFieldLabel } from "../data/moduleConfigs";
 import {
@@ -148,8 +153,7 @@ function getVisibleFormFields(
     }
 
     if (field.key === "track") {
-      const grade = String(values.gradeId ?? "");
-      return grade === "11" || grade === "12" || Boolean(values.track);
+      return requiresTrack(values.gradeId);
     }
 
     return true;
@@ -200,7 +204,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         setLoading(false);
       },
       () => {
-        setError("تعذر تحميل البيانات. تأكد من نشر قواعد Firestore وصلاحية الحساب.");
+        setError("???? ????? ????????. ???? ?? ??? ????? Firestore ??????? ??????.");
         setLoading(false);
       },
     );
@@ -312,6 +316,10 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     try {
       const payload = normalizeForSave(visibleFormFields, formValues);
 
+      if (!requiresTrack(payload.gradeId)) {
+        payload.track = "";
+      }
+
       if (typeof payload.studentIds === "string") {
         payload.studentIds = payload.studentIds
           .split(",")
@@ -333,7 +341,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       if (editing) {
         await updateRecord(config.collection, editing.id, payload, appUser);
-        setNotice("تم تحديث السجل بنجاح.");
+        setNotice("?? ????? ????? ?????.");
       } else {
         const managedRole = getManagedRole(config.collection);
 
@@ -368,7 +376,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         } else {
           await createRecord(config.collection, payload, appUser);
         }
-        setNotice("تمت إضافة السجل بنجاح.");
+        setNotice("??? ????? ????? ?????.");
       }
 
       startCreate();
@@ -376,7 +384,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       setError(
         err instanceof Error
           ? err.message
-          : "تعذر حفظ البيانات. راجع الحقول والصلاحيات.",
+          : "???? ??? ????????. ???? ?????? ??????????.",
       );
     } finally {
       setSaving(false);
@@ -394,13 +402,13 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     try {
       if (record.status && record.status !== "archived") {
         await archiveRecord(config.collection, record.id, appUser);
-        setNotice("تمت أرشفة السجل.");
+        setNotice("??? ????? ?????.");
       } else {
         await removeRecord(config.collection, record.id, appUser);
-        setNotice("تم حذف السجل.");
+        setNotice("?? ??? ?????.");
       }
     } catch {
-      setError("تعذر تنفيذ العملية.");
+      setError("???? ????? ???????.");
     } finally {
       setSaving(false);
     }
@@ -425,9 +433,9 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         }
       }
 
-      setNotice("تمت إضافة البيانات الأساسية غير الموجودة.");
+      setNotice("??? ????? ???????? ???????? ??? ????????.");
     } catch {
-      setError("تعذر إضافة البيانات الأساسية.");
+      setError("???? ????? ???????? ????????.");
     } finally {
       setSaving(false);
     }
@@ -448,23 +456,23 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
     mapped.forEach((row, index) => {
       if (!row.fullName) {
-        errors.push(`السطر ${index + 2}: الاسم الكامل مطلوب.`);
+        errors.push(`????? ${index + 2}: ????? ?????? ?????.`);
       }
 
       if (!row.nationalId) {
-        errors.push(`السطر ${index + 2}: رقم الهوية مطلوب.`);
+        errors.push(`????? ${index + 2}: ??? ?????? ?????.`);
       }
 
       if (config.collection === "students" && !row.username) {
-        errors.push(`السطر ${index + 2}: اسم المستخدم مطلوب.`);
+        errors.push(`????? ${index + 2}: ??? ???????? ?????.`);
       }
 
       if (config.collection === "students" && !row.password) {
-        errors.push(`السطر ${index + 2}: كلمة المرور الأولية مطلوبة.`);
+        errors.push(`????? ${index + 2}: ???? ?????? ??????? ??????.`);
       }
 
       if (row.nationalId && existingIds.has(String(row.nationalId))) {
-        errors.push(`السطر ${index + 2}: رقم الهوية مكرر.`);
+        errors.push(`????? ${index + 2}: ??? ?????? ????.`);
       }
     });
 
@@ -524,10 +532,10 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         }
       }
 
-      setNotice(`تم استيراد ${importRows.length} سجل.`);
+      setNotice(`?? ??????? ${importRows.length} ???.`);
       setImportRows([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر اعتماد الاستيراد.");
+      setError(err instanceof Error ? err.message : "???? ?????? ?????????.");
     } finally {
       setSaving(false);
     }
@@ -543,17 +551,17 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       ? ([
           {
             id: "basic-lower",
-            name: "المرحلة الأساسية الدنيا",
+            name: "??????? ???????? ??????",
             status: "active",
           },
           {
             id: "basic-upper",
-            name: "المرحلة الأساسية العليا",
+            name: "??????? ???????? ??????",
             status: "active",
           },
           {
             id: "secondary",
-            name: "المرحلة الثانوية",
+            name: "??????? ????????",
             status: "active",
           },
         ] satisfies AppRecord[])
@@ -581,7 +589,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
               disabled={saving}
             >
               <Database size={17} aria-hidden="true" />
-              إضافة البيانات الأساسية
+              ????? ???????? ????????
             </button>
           ) : null}
           <button
@@ -592,7 +600,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             }
           >
             <Download size={17} aria-hidden="true" />
-            تصدير Excel
+            ????? Excel
           </button>
         </div>
       </section>
@@ -614,16 +622,16 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-black text-slate-950">
-                استيراد ملف Excel
+                ??????? ??? Excel
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                يجب أن يحتوي الملف على أعمدة مطابقة للحقول: الاسم الكامل، رقم
-                الهوية، المرحلة، الصف، رقم الواتس، البريد الإلكتروني.
+                ??? ?? ????? ????? ??? ????? ?????? ??????: ????? ??????? ???
+                ??????? ???????? ????? ??? ??????? ?????? ??????????.
               </p>
             </div>
             <label className="btn-primary cursor-pointer">
               <FileInput size={18} aria-hidden="true" />
-              اختيار ملف
+              ?????? ???
               <input
                 className="hidden"
                 type="file"
@@ -644,7 +652,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           {importRows.length ? (
             <div className="mt-5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-700">
-                {importRows.length} سجل جاهز للمراجعة
+                {importRows.length} ??? ???? ????????
               </p>
               <button
                 className="btn-primary"
@@ -653,7 +661,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                 disabled={saving || importErrors.length > 0}
               >
                 <Upload size={17} aria-hidden="true" />
-                اعتماد الاستيراد
+                ?????? ?????????
               </button>
             </div>
           ) : null}
@@ -665,16 +673,16 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-black text-slate-950">
-                {editing ? "تعديل سجل" : "إضافة سجل"}
+                {editing ? "????? ???" : "????? ???"}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                الحقول المطلوبة يتم التحقق منها قبل الحفظ.
+                ?????? ???????? ??? ?????? ???? ??? ?????.
               </p>
             </div>
             {editing ? (
               <button className="btn-secondary" type="button" onClick={startCreate}>
                 <X size={16} aria-hidden="true" />
-                إلغاء
+                ?????
               </button>
             ) : null}
           </div>
@@ -707,11 +715,6 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         setFormValues((current) => ({
                           ...current,
                           [field.key]: event.target.value,
-                          ...(field.key === "gradeId" &&
-                          event.target.value !== "11" &&
-                          event.target.value !== "12"
-                            ? { track: "" }
-                            : {}),
                         }))
                       }
                     />
@@ -724,10 +727,15 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         setFormValues((current) => ({
                           ...current,
                           [field.key]: event.target.value,
+                          ...(field.key === "gradeId" &&
+                          event.target.value !== "11" &&
+                          event.target.value !== "12"
+                            ? { track: "" }
+                            : {}),
                         }))
                       }
                     >
-                      <option value="">اختر</option>
+                      <option value="">????</option>
                       {options.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
@@ -773,7 +781,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             <div className="md:col-span-2">
               <button className="btn-primary" type="submit" disabled={saving}>
                 {editing ? <Save size={18} /> : <Plus size={18} />}
-                {editing ? "حفظ التعديل" : "إضافة"}
+                {editing ? "??? ???????" : "?????"}
               </button>
             </div>
           </form>
@@ -783,9 +791,9 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       <section className="surface overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-black text-slate-950">السجلات</h2>
+            <h2 className="text-lg font-black text-slate-950">???????</h2>
             <p className="mt-1 text-sm text-slate-500">
-              {filteredRecords.length} من {records.length} سجل
+              {filteredRecords.length} ?? {records.length} ???
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -797,7 +805,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
               <input
                 className="form-input pr-9"
                 value={search}
-                placeholder="بحث"
+                placeholder="???"
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
@@ -806,12 +814,12 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
-              <option value="all">كل الحالات</option>
-              <option value="active">فعال</option>
-              <option value="inactive">غير فعال</option>
-              <option value="draft">مسودة</option>
-              <option value="published">منشور</option>
-              <option value="archived">مؤرشف</option>
+              <option value="all">?? ???????</option>
+              <option value="active">????</option>
+              <option value="inactive">??? ????</option>
+              <option value="draft">?????</option>
+              <option value="published">?????</option>
+              <option value="archived">?????</option>
             </select>
           </div>
         </div>
@@ -825,7 +833,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                     {getFieldLabel(config, key)}
                   </th>
                 ))}
-                <th className="px-5 py-3">الإجراءات</th>
+                <th className="px-5 py-3">?????????</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -849,7 +857,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                           type="button"
                           onClick={() => startEdit(record)}
                         >
-                          تعديل
+                          ?????
                         </button>
                       ) : null}
                       {config.mode !== "readonly" && config.mode !== "export" ? (
@@ -858,7 +866,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                           type="button"
                           onClick={() => handleDelete(record)}
                           disabled={saving}
-                          title={record.status === "archived" ? "حذف" : "أرشفة"}
+                          title={record.status === "archived" ? "???" : "?????"}
                         >
                           {record.status === "archived" ? (
                             <Trash2 size={16} />
@@ -877,13 +885,13 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
         {!loading && filteredRecords.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-slate-500">
-            لا توجد سجلات مطابقة.
+            ?? ???? ????? ??????.
           </div>
         ) : null}
 
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-slate-500">
-            جاري تحميل البيانات...
+            ???? ????? ????????...
           </div>
         ) : null}
       </section>
@@ -892,10 +900,10 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         <section className="surface overflow-hidden">
           <div className="border-b border-slate-200 px-5 py-4">
             <h2 className="text-lg font-black text-slate-950">
-              المناهج داخل المراحل التعليمية
+              ??????? ???? ??????? ?????????
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              يتم عرض مناهج المعلمين تحت المرحلة المرتبطة بها مباشرة.
+              ??? ??? ????? ???????? ??? ??????? ???????? ??? ??????.
             </p>
           </div>
           <div className="divide-y divide-slate-100">
@@ -913,7 +921,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         {formatCellValue(stage.name)}
                       </h3>
                       <p className="text-sm text-slate-500">
-                        {officialCatalog.length} صف/مسار معتمد، {stageCurriculums.length} منهاج معلم مرتبط
+                        {officialCatalog.length} ??/???? ?????? {stageCurriculums.length} ????? ???? ?????
                       </p>
                     </div>
                     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-learning-blue">
@@ -953,7 +961,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                     </div>
                   ) : (
                     <p className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                      لا توجد مناهج معتمدة لهذه المرحلة في الكتالوج الحالي.
+                      ?? ???? ????? ?????? ???? ??????? ?? ???????? ??????.
                     </p>
                   )}
 
@@ -973,21 +981,21 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                               {formatCellValue(curriculum.name)}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              الصف: {resolveReferenceValue(
-                                { key: "gradeId", label: "الصف", type: "select", options: gradeOptions },
+                              ????: {resolveReferenceValue(
+                                { key: "gradeId", label: "????", type: "select", options: gradeOptions },
                                 curriculum.gradeId,
                                 references,
                               )}
-                              {curriculum.track ? ` - المسار: ${resolveReferenceValue(
-                                { key: "track", label: "المسار", type: "select", options: trackOptions },
+                              {curriculum.track ? ` - ??????: ${resolveReferenceValue(
+                                { key: "track", label: "??????", type: "select", options: trackOptions },
                                 curriculum.track,
                                 references,
                               )}` : ""}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              المعلم:{" "}
+                              ??????:{" "}
                               {formatCellValue(
-                                teacher?.fullName ?? curriculum.teacherId ?? "غير محدد",
+                                teacher?.fullName ?? curriculum.teacherId ?? "??? ????",
                               )}
                             </p>
                             <p className="mt-1 text-xs font-bold text-slate-400">

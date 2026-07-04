@@ -1,13 +1,22 @@
-import { BookOpen, CheckCircle2, Lock, Mail, Send, ShieldAlert } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
 import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  type Unsubscribe,
-} from "firebase/firestore";
+  BookOpen,
+  CheckCircle2,
+  FileText,
+  Link as LinkIcon,
+  Mail,
+  Send,
+  ShieldAlert,
+} from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { collection, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import {
+  getSubjectsForGrade,
+  gradeOptions,
+  requiresTrack,
+  trackOptions,
+} from "../../data/curriculumCatalog";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../lib/firebase";
 import { createRecord, type AppRecord } from "../../services/records";
@@ -18,7 +27,7 @@ function useQueryParam(name: string) {
   return new URLSearchParams(location.search).get(name);
 }
 
-function useStudentCollection(
+function useCollectionByField(
   collectionName: string,
   field: string,
   value: string | null | undefined,
@@ -34,13 +43,9 @@ function useStudentCollection(
     const unsubscribe = onSnapshot(
       query(collection(db, collectionName), where(field, "==", value)),
       (snapshot) => {
-        setRecords(
-          snapshot.docs.map((item) => ({
-            id: item.id,
-            ...item.data(),
-          })),
-        );
+        setRecords(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
       },
+      () => setRecords([]),
     );
 
     return unsubscribe;
@@ -51,16 +56,46 @@ function useStudentCollection(
 
 export function StudentLearningPage({ view }: { view: string }) {
   const { appUser } = useAuth();
-  const courseId = useQueryParam("courseId");
+  const gradeParam = useQueryParam("gradeId");
+  const trackParam = useQueryParam("track");
+  const subjectParam = useQueryParam("subject");
   const lessonId = useQueryParam("lessonId");
   const quizId = useQueryParam("quizId");
-  const [courses, setCourses] = useState<AppRecord[]>([]);
+  const [studentProfile, setStudentProfile] = useState<AppRecord | null>(null);
+  const [gradeId, setGradeId] = useState(gradeParam ?? "1");
+  const [track, setTrack] = useState(trackParam ?? "");
   const [notifications, setNotifications] = useState<AppRecord[]>([]);
   const [messages, setMessages] = useState<AppRecord[]>([]);
-  const [subject, setSubject] = useState("");
+  const [messageSubject, setMessageSubject] = useState("");
   const [message, setMessage] = useState("");
   const [receiverId, setReceiverId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const showTrack = requiresTrack(gradeId);
+  const subjects = useMemo(
+    () => getSubjectsForGrade(gradeId, showTrack ? track : ""),
+    [gradeId, showTrack, track],
+  );
+  const selectedSubject = subjectParam ?? subjects[0] ?? "";
+  const lessonsByGrade = useCollectionByField("lessons", "gradeId", gradeParam);
+  const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", lessonId);
+  const quizzes = useCollectionByField("quizzes", "lessonId", lessonId);
+  const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
+  const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
+
+  useEffect(() => {
+    if (!showTrack) {
+      setTrack("");
+    }
+  }, [showTrack]);
+
+  useEffect(() => {
+    if (gradeParam) {
+      setGradeId(gradeParam);
+    }
+    if (trackParam) {
+      setTrack(trackParam);
+    }
+  }, [gradeParam, trackParam]);
 
   useEffect(() => {
     if (!appUser) {
@@ -69,45 +104,58 @@ export function StudentLearningPage({ view }: { view: string }) {
 
     const unsubs: Unsubscribe[] = [
       onSnapshot(
-        query(collection(db, "teacherCourses"), where("studentIds", "array-contains", appUser.uid)),
+        query(collection(db, "students"), where("studentId", "==", appUser.uid)),
         (snapshot) => {
-          setCourses(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+          const profile = snapshot.docs[0];
+          setStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
         },
+        () => undefined,
       ),
       onSnapshot(
         query(collection(db, "notifications"), where("targetType", "==", "allStudents")),
         (snapshot) => {
           setNotifications(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
         },
+        () => undefined,
       ),
       onSnapshot(
         query(collection(db, "messages"), where("senderId", "==", appUser.uid)),
         (snapshot) => {
           setMessages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
         },
+        () => undefined,
       ),
     ];
 
     return () => unsubs.forEach((unsubscribe) => unsubscribe());
   }, [appUser]);
 
-  const selectedCourse = courses.find((course) => course.id === courseId);
-  const lessons = useStudentCollection("lessons", "courseId", courseId);
-  const lessonBlocks = useStudentCollection("lessonBlocks", "lessonId", lessonId);
-  const quizzes = useStudentCollection("quizzes", "lessonId", lessonId);
-  const attempts = useStudentCollection("quizAttempts", "studentId", appUser?.uid);
-  const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
+  useEffect(() => {
+    const profileGrade = String(studentProfile?.gradeId ?? "");
+    const profileTrack = String(studentProfile?.track ?? "");
 
-  const unlockedLessons = useMemo<Array<AppRecord & { locked: boolean }>>(() => {
-    const freeMode = selectedCourse?.learningMode === "free";
-    return lessons
-      .slice()
-      .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
-      .map((lesson, index) => ({
-        ...lesson,
-        locked: !freeMode && index > 0,
-      }));
-  }, [lessons, selectedCourse]);
+    if (!gradeParam && profileGrade) {
+      setGradeId(profileGrade);
+    }
+    if (!trackParam && requiresTrack(profileGrade) && profileTrack) {
+      setTrack(profileTrack);
+    }
+  }, [gradeParam, studentProfile, trackParam]);
+
+  const subjectLessons = useMemo(
+    () =>
+      lessonsByGrade
+        .filter((lesson) => {
+          const lessonSubject = String(lesson.subject ?? "");
+          const lessonTrack = String(lesson.track ?? "");
+          return (
+            lessonSubject === selectedSubject &&
+            (!requiresTrack(gradeParam) || lessonTrack === (trackParam ?? ""))
+          );
+        })
+        .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
+    [gradeParam, lessonsByGrade, selectedSubject, trackParam],
+  );
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -121,19 +169,18 @@ export function StudentLearningPage({ view }: { view: string }) {
       {
         senderId: appUser.uid,
         receiverId,
-        subject,
+        subject: messageSubject,
         message,
         status: "new",
-        courseId: courseId ?? "",
         lessonId: lessonId ?? "",
       },
       appUser,
     );
 
-    setSubject("");
+    setMessageSubject("");
     setMessage("");
     setReceiverId("");
-    setNotice("تم إرسال الرسالة.");
+    setNotice("?? ????? ???????.");
   }
 
   async function submitQuizAttempt() {
@@ -148,7 +195,6 @@ export function StudentLearningPage({ view }: { view: string }) {
       {
         quizId: selectedQuiz.id,
         lessonId: selectedQuiz.lessonId ?? "",
-        courseId: selectedQuiz.courseId ?? courseId ?? "",
         teacherId: selectedQuiz.teacherId ?? "",
         studentId: appUser.uid,
         score: passingScore,
@@ -159,18 +205,19 @@ export function StudentLearningPage({ view }: { view: string }) {
       appUser,
     );
 
-    setNotice("تم تسجيل محاولة الاختبار بنجاح.");
+    setNotice("?? ????? ?????? ???????? ?????.");
   }
 
   if (view === "profile") {
     return (
-      <StudentShell title="الملف الشخصي" subtitle="بيانات الحساب والهوية التعليمية.">
+      <StudentShell title="????? ??????" subtitle="?????? ?????? ????? ????????.">
         <div className="surface p-5">
           <p className="text-lg font-black text-slate-950">{appUser?.displayName}</p>
-          <p className="mt-1 text-sm text-slate-500">{appUser?.email}</p>
-          <p className="mt-4 text-sm font-semibold text-slate-700">
-            الدور: Student
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{appUser?.username ?? appUser?.email}</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="????" value={formatCellValue(studentProfile?.gradeId ?? gradeId)} />
+            <MiniMetric label="??????" value={formatCellValue(studentProfile?.track ?? "?? ????")} />
+          </div>
         </div>
       </StudentShell>
     );
@@ -178,42 +225,42 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   if (view === "notifications") {
     return (
-      <StudentShell title="تنبيهات الطالب" subtitle="التنبيهات الفعالة الموجهة للطلاب.">
-        <RecordList records={notifications} empty="لا توجد تنبيهات حالياً." />
+      <StudentShell title="??????? ??????" subtitle="????????? ??????? ??????? ??????.">
+        <RecordList records={notifications} empty="?? ???? ??????? ??????." />
       </StudentShell>
     );
   }
 
   if (view === "messages") {
     return (
-      <StudentShell title="رسائل الطالب" subtitle="إرسال رسالة للمعلم وقراءة الرسائل السابقة.">
+      <StudentShell title="????? ??????" subtitle="????? ????? ?????? ?????? ??????? ???????.">
         {notice ? <Notice text={notice} /> : null}
         <form className="surface grid gap-4 p-5 md:grid-cols-2" onSubmit={handleSendMessage}>
           <label className="block space-y-2">
-            <span className="form-label">معرّف المعلم المستلم</span>
+            <span className="form-label">????? ?????? ???????</span>
             <input className="form-input" value={receiverId} onChange={(e) => setReceiverId(e.target.value)} required />
           </label>
           <label className="block space-y-2">
-            <span className="form-label">الموضوع</span>
-            <input className="form-input" value={subject} onChange={(e) => setSubject(e.target.value)} required />
+            <span className="form-label">???????</span>
+            <input className="form-input" value={messageSubject} onChange={(e) => setMessageSubject(e.target.value)} required />
           </label>
           <label className="block space-y-2 md:col-span-2">
-            <span className="form-label">الرسالة</span>
+            <span className="form-label">???????</span>
             <textarea className="form-input min-h-28" value={message} onChange={(e) => setMessage(e.target.value)} required />
           </label>
           <button className="btn-primary md:col-span-2" type="submit">
             <Send size={18} />
-            إرسال
+            ?????
           </button>
         </form>
-        <RecordList records={messages} empty="لا توجد رسائل مرسلة." />
+        <RecordList records={messages} empty="?? ???? ????? ?????." />
       </StudentShell>
     );
   }
 
   if (view === "lesson") {
     return (
-      <StudentShell title="عرض الدرس" subtitle="عناصر الدرس تظهر حسب ترتيب المعلم.">
+      <StudentShell title="??? ?????" subtitle="????? ????? ???? ??? ????? ??????.">
         {notice ? <Notice text={notice} /> : null}
         <div className="space-y-3">
           {lessonBlocks
@@ -225,16 +272,17 @@ export function StudentLearningPage({ view }: { view: string }) {
                 <h2 className="mt-2 text-lg font-black text-slate-950">{formatCellValue(block.title)}</h2>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{formatCellValue(block.content)}</p>
                 {block.url ? (
-                  <a className="mt-3 inline-flex text-sm font-bold text-learning-blue" href={String(block.url)} target="_blank">
-                    فتح الرابط
+                  <a className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue" href={String(block.url)} target="_blank" rel="noreferrer">
+                    <LinkIcon size={16} />
+                    ??? ??????
                   </a>
                 ) : null}
               </article>
             ))}
         </div>
         {quizzes.length ? (
-          <Link className="btn-primary mt-4" to={`/student/quiz?lessonId=${lessonId}&quizId=${quizzes[0].id}&courseId=${courseId ?? ""}`}>
-            فتح الاختبار
+          <Link className="btn-primary mt-4" to={`/student/quiz?lessonId=${lessonId}&quizId=${quizzes[0].id}`}>
+            ??? ????????
           </Link>
         ) : null}
       </StudentShell>
@@ -243,24 +291,24 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   if (view === "quiz") {
     return (
-      <StudentShell title="تقديم الاختبار" subtitle="يعرض إعدادات الاختبار ويحفظ محاولة الطالب.">
+      <StudentShell title="????? ????????" subtitle="???? ??????? ???????? ????? ?????? ??????.">
         {notice ? <Notice text={notice} /> : null}
         {selectedQuiz ? (
           <section className="surface p-5">
             <h2 className="text-xl font-black text-slate-950">{formatCellValue(selectedQuiz.title)}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">{formatCellValue(selectedQuiz.description)}</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <MiniMetric label="درجة النجاح" value={formatCellValue(selectedQuiz.passingScore)} />
-              <MiniMetric label="المحاولات" value={formatCellValue(selectedQuiz.attemptsAllowed)} />
-              <MiniMetric label="مفعل" value={formatCellValue(selectedQuiz.isActive)} />
+              <MiniMetric label="???? ??????" value={formatCellValue(selectedQuiz.passingScore)} />
+              <MiniMetric label="?????????" value={formatCellValue(selectedQuiz.attemptsAllowed)} />
+              <MiniMetric label="????" value={formatCellValue(selectedQuiz.isActive)} />
             </div>
             <button className="btn-primary mt-5" type="button" onClick={submitQuizAttempt}>
               <CheckCircle2 size={18} />
-              تسجيل محاولة
+              ????? ??????
             </button>
           </section>
         ) : (
-          <EmptyState text="لا يوجد اختبار لهذا الدرس." />
+          <EmptyState text="?? ???? ?????? ???? ?????." />
         )}
       </StudentShell>
     );
@@ -268,61 +316,82 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   if (view === "result") {
     return (
-      <StudentShell title="نتائج الاختبارات" subtitle="درجات ومحاولات الطالب.">
-        <RecordList records={attempts} empty="لا توجد نتائج بعد." />
+      <StudentShell title="????? ??????????" subtitle="????? ???????? ??????.">
+        <RecordList records={attempts} empty="?? ???? ????? ???." />
       </StudentShell>
     );
   }
 
   if (view === "course-detail") {
     return (
-      <StudentShell title={formatCellValue(selectedCourse?.title ?? "تفاصيل المنهاج")} subtitle="الدروس المتاحة والمقفلة حسب نمط التعلم.">
+      <StudentShell title={selectedSubject || "?????? ???????"} subtitle="???? ??????? ???????? ????? ???????.">
         <div className="space-y-3">
-          {unlockedLessons.map((lesson) => (
+          {subjectLessons.map((lesson) => (
             <article key={lesson.id} className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-black text-slate-950">{formatCellValue(lesson["title"])}</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {lesson.locked ? "هذا الدرس مقفل حتى تنجح في الدرس السابق." : "الدرس متاح الآن."}
-                </p>
+                <h2 className="text-lg font-black text-slate-950">{formatCellValue(lesson.title)}</h2>
+                <p className="mt-1 text-sm text-slate-500">{formatCellValue(lesson.objectives ?? "????? ???? ????.")}</p>
               </div>
-              {lesson.locked ? (
-                <span className="inline-flex items-center gap-2 text-sm font-bold text-amber-700">
-                  <Lock size={16} />
-                  مقفل
-                </span>
-              ) : (
-                <Link className="btn-primary" to={`/student/lesson?courseId=${courseId}&lessonId=${lesson.id}`}>
-                  فتح الدرس
-                </Link>
-              )}
+              <Link className="btn-primary" to={`/student/lesson?lessonId=${lesson.id}`}>
+                ??? ?????
+              </Link>
             </article>
           ))}
         </div>
+        {!subjectLessons.length ? <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." /> : null}
       </StudentShell>
     );
   }
 
   return (
-    <StudentShell title="المناهج المتاحة" subtitle="المناهج الفعالة المرتبطة بحساب الطالب.">
+    <StudentShell title="??????? ???????" subtitle="???? ???? ????? ??????? ?????? ??.">
+      <section className="surface grid gap-4 p-5 md:grid-cols-2">
+        <label className="block space-y-2">
+          <span className="form-label">????</span>
+          <select className="form-input" value={gradeId} onChange={(event) => setGradeId(event.target.value)}>
+            {gradeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {showTrack ? (
+          <label className="block space-y-2">
+            <span className="form-label">??????</span>
+            <select className="form-input" value={track} onChange={(event) => setTrack(event.target.value)}>
+              <option value="">???? ??????</option>
+              {trackOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2">
-        {courses.map((course) => (
-          <article key={course.id} className="surface p-5">
+        {subjects.map((item) => (
+          <article key={item} className="surface p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold text-learning-blue">{formatCellValue(course.learningMode)}</p>
-                <h2 className="mt-2 text-xl font-black text-slate-950">{formatCellValue(course.title)}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{formatCellValue(course.description)}</p>
+                <p className="text-xs font-bold text-learning-blue">{gradeOptions.find((grade) => grade.value === gradeId)?.label}</p>
+                <h2 className="mt-2 text-xl font-black text-slate-950">{item}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">???? ?????? ??????? ??? ???? ???????.</p>
               </div>
               <BookOpen className="text-learning-blue" size={26} />
             </div>
-            <Link className="btn-primary mt-5" to={`/student/course-detail?courseId=${course.id}`}>
-              دخول المنهاج
+            <Link
+              className="btn-primary mt-5"
+              to={`/student/course-detail?gradeId=${gradeId}&track=${encodeURIComponent(showTrack ? track : "")}&subject=${encodeURIComponent(item)}`}
+            >
+              ???? ???????
             </Link>
           </article>
         ))}
       </div>
-      {!courses.length ? <EmptyState text="لا توجد مناهج متاحة لهذا الحساب بعد." /> : null}
+      {!subjects.length ? <EmptyState text="???? ?????? ???? ????? ????." /> : null}
     </StudentShell>
   );
 }
@@ -334,16 +403,14 @@ function StudentShell({
 }: {
   title: string;
   subtitle: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="space-y-6">
       <section>
         <p className="text-sm font-bold text-learning-blue">Student</p>
         <h1 className="mt-2 text-3xl font-black text-slate-950">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          {subtitle}
-        </p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{subtitle}</p>
       </section>
       {children}
     </div>

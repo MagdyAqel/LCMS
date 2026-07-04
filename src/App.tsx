@@ -15,6 +15,7 @@ import { DataModulePage } from "./pages/DataModulePage";
 import { getModuleConfig } from "./data/moduleConfigs";
 import { ReportsPage } from "./pages/ReportsPage";
 import { StudentLearningPage } from "./pages/student/StudentLearningPage";
+import { LessonBuilderPage } from "./pages/teacher/LessonBuilderPage";
 
 function WithLayout({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
@@ -35,6 +36,10 @@ function TeacherModule({ module }: { module: (typeof teacherModules)[number] }) 
 
   if (module.path === "/teacher/reports") {
     return <ReportsPage role="teacher" />;
+  }
+
+  if (module.path === "/teacher/lesson-blocks") {
+    return <LessonBuilderPage />;
   }
 
   return config ? <DataModulePage config={config} /> : <SpecModulePage module={module} />;
