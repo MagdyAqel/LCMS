@@ -11,6 +11,13 @@ export type DemoAccount = {
 export const demoAdminAccounts: DemoAccount[] = [
   {
     role: "admin",
+    username: "ayat",
+    password: "Admin@2026!01",
+    displayName: "Ayat",
+    contactEmail: "ayat@example.com",
+  },
+  {
+    role: "admin",
     username: "admin01",
     password: "Admin@2026!01",
     displayName: "مسؤول النظام 01",
