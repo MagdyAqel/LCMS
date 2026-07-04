@@ -124,7 +124,7 @@ const stageSeeds = [
   { name: "رياض الأطفال", description: "مرحلة الطفولة المبكرة", order: 4, status: "active" },
 ];
 
-export const moduleConfigs: ModuleConfig[] = [
+const allModuleConfigs: ModuleConfig[] = [
   {
     path: "/admin/teachers",
     title: "إدارة المعلمين",
@@ -483,6 +483,50 @@ export const moduleConfigs: ModuleConfig[] = [
     ],
   },
 ];
+
+const hiddenAdminConfigPaths = new Set([
+  "/admin/specializations",
+  "/admin/grades",
+  "/admin/subjects",
+]);
+
+export const moduleConfigs: ModuleConfig[] = allModuleConfigs
+  .filter((config) => !hiddenAdminConfigPaths.has(config.path))
+  .map((config) => {
+    if (config.path === "/admin/curriculums") {
+      return {
+        ...config,
+        title: "إدارة مناهج المعلمين",
+        description:
+          "إدارة المناهج التي ينشئها المعلمون وربطها بالمرحلة التعليمية المناسبة.",
+        tableFields: ["name", "stageId", "teacherId", "status"],
+        searchableFields: ["name", "description", "teacherId", "stageId"],
+        formFields: config.formFields.filter(
+          (field) => field.key !== "gradeId" && field.key !== "subjectId",
+        ),
+      };
+    }
+
+    if (config.path === "/teacher/courses") {
+      return {
+        ...config,
+        tableFields: ["title", "stageId", "learningMode", "passingScore", "status"],
+        formFields: config.formFields.filter(
+          (field) => field.key !== "gradeId" && field.key !== "subjectId",
+        ),
+      };
+    }
+
+    if (config.path === "/admin/stages") {
+      return {
+        ...config,
+        description:
+          "إدارة المراحل التعليمية مع عرض المناهج المرتبطة بكل مرحلة داخل نفس الصفحة.",
+      };
+    }
+
+    return config;
+  });
 
 export function getModuleConfig(path: string) {
   return moduleConfigs.find((config) => config.path === path);

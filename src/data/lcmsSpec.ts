@@ -38,7 +38,7 @@ export const palestinianTeacherSpecializations = [
   "رياض الأطفال",
 ];
 
-export const adminModules: SpecModule[] = [
+const allAdminModules: SpecModule[] = [
   {
     path: "/admin/teachers",
     title: "إدارة المعلمين",
@@ -139,6 +139,39 @@ export const adminModules: SpecModule[] = [
     actions: ["حفظ الإعدادات", "تحديث السياسة"],
   },
 ];
+
+const hiddenAdminModulePaths = new Set([
+  "/admin/specializations",
+  "/admin/grades",
+  "/admin/subjects",
+]);
+
+export const adminModules: SpecModule[] = allAdminModules
+  .filter((module) => !hiddenAdminModulePaths.has(module.path))
+  .map((module) =>
+    module.path === "/admin/curriculums"
+      ? {
+          ...module,
+          title: "إدارة مناهج المعلمين",
+          description:
+            "إدارة المناهج التي ينشئها المعلمون وربط كل منها بمرحلة تعليمية ليتم عرضها داخل المرحلة المناسبة.",
+          fields: [
+            "اسم المنهاج",
+            "المرحلة التعليمية",
+            "المعلم المسؤول",
+            "تاريخ البداية",
+            "تاريخ النهاية",
+            "الحالة",
+          ],
+          actions: [
+            "إنشاء منهاج",
+            "تعديل منهاج",
+            "أرشفة منهاج",
+            "عرض المناهج حسب المرحلة",
+          ],
+        }
+      : module,
+  );
 
 export const teacherModules: SpecModule[] = [
   {
@@ -326,7 +359,7 @@ export const studentModules: SpecModule[] = [
   },
 ];
 
-export const roleNavigation: Record<UserRole, NavGroup[]> = {
+const rawRoleNavigation: Record<UserRole, NavGroup[]> = {
   admin: [
     {
       title: "الرئيسية",
@@ -338,7 +371,7 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
     },
     {
       title: "الإدارة الأكاديمية",
-      items: adminModules.slice(0, 6).map((item) => ({
+      items: adminModules.slice(0, 3).map((item) => ({
         label: item.title,
         to: item.path,
         roles: ["admin"],
@@ -346,7 +379,7 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
     },
     {
       title: "الرقابة",
-      items: adminModules.slice(6).map((item) => ({
+      items: adminModules.slice(3).map((item) => ({
         label: item.title,
         to: item.path,
         roles: ["admin"],
@@ -395,6 +428,100 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
         to: item.path,
         roles: ["student"],
       })),
+    },
+  ],
+};
+
+const moduleLabels: Record<string, string> = {
+  "/admin/teachers": "إدارة المعلمين",
+  "/admin/stages": "إدارة المراحل التعليمية",
+  "/admin/curriculums": "إدارة مناهج المعلمين",
+  "/admin/reports": "التقارير العامة",
+  "/admin/audit-logs": "سجل التدقيق",
+  "/admin/settings": "إعدادات النظام",
+  "/teacher/students": "إدارة الطلاب",
+  "/teacher/students/import": "استيراد الطلاب من Excel",
+  "/teacher/students/export": "تصدير الطلاب",
+  "/teacher/courses": "المناهج الخاصة",
+  "/teacher/lessons": "إدارة الدروس",
+  "/teacher/lesson-blocks": "ترتيب عناصر الدرس",
+  "/teacher/quizzes": "إنشاء الاختبارات",
+  "/teacher/quiz-results": "نتائج الاختبارات",
+  "/teacher/notifications": "التنبيهات",
+  "/teacher/messages": "الرسائل",
+  "/teacher/reports": "تقارير المعلم",
+  "/teacher/activity-log": "سجل النشاط",
+  "/student/courses": "المناهج المتاحة",
+  "/student/course-detail": "تفاصيل المنهاج",
+  "/student/lesson": "عرض الدرس",
+  "/student/quiz": "تقديم الاختبار",
+  "/student/result": "نتيجة الاختبار",
+  "/student/messages": "رسائل الطالب",
+  "/student/notifications": "تنبيهات الطالب",
+  "/student/profile": "الملف الشخصي",
+};
+
+function moduleNavItem(module: SpecModule, roles: UserRole[]) {
+  return {
+    label: moduleLabels[module.path] ?? module.title,
+    to: module.path,
+    roles,
+  };
+}
+
+export const roleNavigation: Record<UserRole, NavGroup[]> = {
+  admin: [
+    {
+      title: "الرئيسية",
+      items: [
+        { label: "لوحة التحكم", to: "/dashboard", roles: ["admin"] },
+        { label: "المستخدمون", to: "/admin/users", roles: ["admin"] },
+        { label: "حسابات وهمية", to: "/admin/demo-accounts", roles: ["admin"] },
+      ],
+    },
+    {
+      title: "الإدارة الأكاديمية",
+      items: adminModules.slice(0, 3).map((item) => moduleNavItem(item, ["admin"])),
+    },
+    {
+      title: "الرقابة",
+      items: adminModules.slice(3).map((item) => moduleNavItem(item, ["admin"])),
+    },
+  ],
+  teacher: [
+    {
+      title: "الرئيسية",
+      items: [{ label: "لوحة التحكم", to: "/dashboard", roles: ["teacher"] }],
+    },
+    {
+      title: "الطلاب والمناهج",
+      items: teacherModules
+        .slice(0, 8)
+        .map((item) => moduleNavItem(item, ["teacher"])),
+    },
+    {
+      title: "التواصل والتقارير",
+      items: teacherModules
+        .slice(8)
+        .map((item) => moduleNavItem(item, ["teacher"])),
+    },
+  ],
+  student: [
+    {
+      title: "الرئيسية",
+      items: [{ label: "لوحة التحكم", to: "/dashboard", roles: ["student"] }],
+    },
+    {
+      title: "التعلم",
+      items: studentModules
+        .slice(0, 5)
+        .map((item) => moduleNavItem(item, ["student"])),
+    },
+    {
+      title: "التواصل",
+      items: studentModules
+        .slice(5)
+        .map((item) => moduleNavItem(item, ["student"])),
     },
   ],
 };

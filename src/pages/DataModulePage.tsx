@@ -89,13 +89,19 @@ function normalizeForSave(fields: FormField[], values: Record<string, unknown>) 
 }
 
 function getReferenceCollections(config: ModuleConfig) {
-  return Array.from(
+  const collections = Array.from(
     new Set(
       config.formFields
         .map((field) => field.reference?.collection)
         .filter((value): value is string => Boolean(value)),
     ),
   );
+
+  if (config.collection === "educationalStages") {
+    return Array.from(new Set([...collections, "curriculums", "teachers"]));
+  }
+
+  return collections;
 }
 
 function resolveReferenceValue(
@@ -840,6 +846,78 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           </div>
         ) : null}
       </section>
+
+      {config.collection === "educationalStages" ? (
+        <section className="surface overflow-hidden">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="text-lg font-black text-slate-950">
+              المناهج داخل المراحل التعليمية
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              يتم عرض مناهج المعلمين تحت المرحلة المرتبطة بها مباشرة.
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {filteredRecords.map((stage) => {
+              const stageCurriculums = (references.curriculums ?? []).filter(
+                (curriculum) => curriculum.stageId === stage.id,
+              );
+
+              return (
+                <div key={stage.id} className="bg-white px-5 py-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-base font-black text-slate-950">
+                        {formatCellValue(stage.name)}
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        {stageCurriculums.length} منهاج مرتبط
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-learning-blue">
+                      {formatCellValue(stage.status)}
+                    </span>
+                  </div>
+
+                  {stageCurriculums.length ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {stageCurriculums.map((curriculum) => {
+                        const teacher = (references.teachers ?? []).find(
+                          (item) => item.id === curriculum.teacherId,
+                        );
+
+                        return (
+                          <div
+                            key={curriculum.id}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <p className="font-black text-slate-950">
+                              {formatCellValue(curriculum.name)}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              المعلم:{" "}
+                              {formatCellValue(
+                                teacher?.fullName ?? curriculum.teacherId ?? "غير محدد",
+                              )}
+                            </p>
+                            <p className="mt-1 text-xs font-bold text-slate-400">
+                              {formatCellValue(curriculum.status)}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      لا توجد مناهج مرتبطة بهذه المرحلة بعد.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
