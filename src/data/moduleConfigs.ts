@@ -1,5 +1,6 @@
 import type { RecordScope } from "../services/records";
 import type { UserRole } from "../types";
+import { gradeOptions, trackOptions } from "./curriculumCatalog";
 import { palestinianTeacherSpecializations } from "./lcmsSpec";
 
 export type FieldOption = {
@@ -53,7 +54,8 @@ const studentFormFields: FormField[] = [
   { key: "password", label: "كلمة المرور الأولية", type: "password", required: true, hiddenOnEdit: true },
   { key: "nationalId", label: "رقم الهوية", type: "text", required: true },
   { key: "stageId", label: "المرحلة", type: "select", reference: { collection: "educationalStages", labelKey: "name" } },
-  { key: "gradeId", label: "الصف", type: "select", reference: { collection: "gradeLevels", labelKey: "name" } },
+  { key: "gradeId", label: "الصف", type: "select", options: gradeOptions, required: true },
+  { key: "track", label: "المسار", type: "select", options: trackOptions },
   { key: "whatsappNumber", label: "رقم الواتس", type: "tel" },
   { key: "email", label: "البريد الإلكتروني", type: "email" },
   {
@@ -266,7 +268,7 @@ const allModuleConfigs: ModuleConfig[] = [
     roles: ["teacher"],
     scope: { type: "teacherOwned" },
     ownerField: "teacherId",
-    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "whatsappNumber", "status"],
+    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "track", "whatsappNumber", "status"],
     searchableFields: ["fullName", "username", "nationalId", "whatsappNumber", "email"],
     formFields: studentFormFields,
   },
@@ -279,7 +281,7 @@ const allModuleConfigs: ModuleConfig[] = [
     scope: { type: "teacherOwned" },
     ownerField: "teacherId",
     mode: "import",
-    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "whatsappNumber", "email"],
+    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "track", "whatsappNumber", "email"],
     searchableFields: ["fullName", "username", "nationalId", "email"],
     formFields: studentFormFields,
   },
@@ -291,7 +293,7 @@ const allModuleConfigs: ModuleConfig[] = [
     roles: ["teacher"],
     scope: { type: "teacherOwned" },
     mode: "export",
-    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "whatsappNumber", "email", "status"],
+    tableFields: ["fullName", "username", "nationalId", "stageId", "gradeId", "track", "whatsappNumber", "email", "status"],
     searchableFields: ["fullName", "username", "nationalId", "email"],
     formFields: studentFormFields,
   },
@@ -499,21 +501,39 @@ export const moduleConfigs: ModuleConfig[] = allModuleConfigs
         title: "إدارة مناهج المعلمين",
         description:
           "إدارة المناهج التي ينشئها المعلمون وربطها بالمرحلة التعليمية المناسبة.",
-        tableFields: ["name", "stageId", "teacherId", "status"],
-        searchableFields: ["name", "description", "teacherId", "stageId"],
-        formFields: config.formFields.filter(
-          (field) => field.key !== "gradeId" && field.key !== "subjectId",
-        ),
+        tableFields: ["name", "stageId", "gradeId", "track", "teacherId", "status"],
+        searchableFields: ["name", "description", "teacherId", "stageId", "gradeId", "track"],
+        formFields: config.formFields
+          .filter((field) => field.key !== "subjectId")
+          .flatMap((field) => {
+            if (field.key === "gradeId") {
+              return [
+                { ...field, label: "الصف", options: gradeOptions, reference: undefined },
+                { key: "track", label: "المسار", type: "select" as const, options: trackOptions },
+              ];
+            }
+
+            return [field];
+          }),
       };
     }
 
     if (config.path === "/teacher/courses") {
       return {
         ...config,
-        tableFields: ["title", "stageId", "learningMode", "passingScore", "status"],
-        formFields: config.formFields.filter(
-          (field) => field.key !== "gradeId" && field.key !== "subjectId",
-        ),
+        tableFields: ["title", "stageId", "gradeId", "track", "learningMode", "passingScore", "status"],
+        formFields: config.formFields
+          .filter((field) => field.key !== "subjectId")
+          .flatMap((field) => {
+            if (field.key === "gradeId") {
+              return [
+                { ...field, label: "الصف", options: gradeOptions, reference: undefined },
+                { key: "track", label: "المسار", type: "select" as const, options: trackOptions },
+              ];
+            }
+
+            return [field];
+          }),
       };
     }
 

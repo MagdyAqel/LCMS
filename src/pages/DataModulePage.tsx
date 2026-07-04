@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
+import { getStageCatalog, gradeOptions, trackOptions } from "../data/curriculumCatalog";
 import type { FormField, ModuleConfig } from "../data/moduleConfigs";
 import { getFieldLabel } from "../data/moduleConfigs";
 import {
@@ -110,6 +111,11 @@ function resolveReferenceValue(
   references: ReferenceMap,
 ) {
   if (!field?.reference || !value) {
+    const option = field?.options?.find((item) => item.value === String(value));
+    if (option) {
+      return option.label;
+    }
+
     return formatCellValue(value);
   }
 
@@ -127,7 +133,11 @@ function mapImportedRow(row: Record<string, unknown>, fields: FormField[]) {
   }, {});
 }
 
-function getVisibleFormFields(fields: FormField[], editing: boolean) {
+function getVisibleFormFields(
+  fields: FormField[],
+  editing: boolean,
+  values: Record<string, unknown>,
+) {
   return fields.filter((field) => {
     if (editing && field.hiddenOnEdit) {
       return false;
@@ -135,6 +145,11 @@ function getVisibleFormFields(fields: FormField[], editing: boolean) {
 
     if (!editing && field.hiddenOnCreate) {
       return false;
+    }
+
+    if (field.key === "track") {
+      const grade = String(values.gradeId ?? "");
+      return grade === "11" || grade === "12" || Boolean(values.track);
     }
 
     return true;
@@ -260,8 +275,8 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
   }, [records, search, statusFilter]);
 
   const visibleFormFields = useMemo(
-    () => getVisibleFormFields(config.formFields, Boolean(editing)),
-    [config.formFields, editing],
+    () => getVisibleFormFields(config.formFields, Boolean(editing), formValues),
+    [config.formFields, editing, formValues],
   );
 
   function startCreate() {
@@ -523,6 +538,27 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     label: getFieldLabel(config, key),
   }));
 
+  const stageCatalogRecords =
+    config.collection === "educationalStages" && filteredRecords.length === 0
+      ? ([
+          {
+            id: "basic-lower",
+            name: "المرحلة الأساسية الدنيا",
+            status: "active",
+          },
+          {
+            id: "basic-upper",
+            name: "المرحلة الأساسية العليا",
+            status: "active",
+          },
+          {
+            id: "secondary",
+            name: "المرحلة الثانوية",
+            status: "active",
+          },
+        ] satisfies AppRecord[])
+      : filteredRecords;
+
   return (
     <div className="space-y-6">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -671,6 +707,11 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         setFormValues((current) => ({
                           ...current,
                           [field.key]: event.target.value,
+                          ...(field.key === "gradeId" &&
+                          event.target.value !== "11" &&
+                          event.target.value !== "12"
+                            ? { track: "" }
+                            : {}),
                         }))
                       }
                     />
@@ -858,10 +899,11 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             </p>
           </div>
           <div className="divide-y divide-slate-100">
-            {filteredRecords.map((stage) => {
+            {stageCatalogRecords.map((stage) => {
               const stageCurriculums = (references.curriculums ?? []).filter(
                 (curriculum) => curriculum.stageId === stage.id,
               );
+              const officialCatalog = getStageCatalog(stage.name);
 
               return (
                 <div key={stage.id} className="bg-white px-5 py-4">
@@ -871,13 +913,49 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         {formatCellValue(stage.name)}
                       </h3>
                       <p className="text-sm text-slate-500">
-                        {stageCurriculums.length} منهاج مرتبط
+                        {officialCatalog.length} صف/مسار معتمد، {stageCurriculums.length} منهاج معلم مرتبط
                       </p>
                     </div>
                     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-learning-blue">
                       {formatCellValue(stage.status)}
                     </span>
                   </div>
+
+                  {officialCatalog.length ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {officialCatalog.map((entry) => (
+                        <div
+                          key={`${entry.gradeNumber}-${entry.track ?? "general"}`}
+                          className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-black text-slate-950">
+                              {entry.gradeName}
+                            </p>
+                            {entry.trackName ? (
+                              <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-learning-blue">
+                                {entry.trackName}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {entry.subjects.map((subject) => (
+                              <span
+                                key={subject}
+                                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
+                              >
+                                {subject}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      لا توجد مناهج معتمدة لهذه المرحلة في الكتالوج الحالي.
+                    </p>
+                  )}
 
                   {stageCurriculums.length ? (
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -895,6 +973,18 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                               {formatCellValue(curriculum.name)}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
+                              الصف: {resolveReferenceValue(
+                                { key: "gradeId", label: "الصف", type: "select", options: gradeOptions },
+                                curriculum.gradeId,
+                                references,
+                              )}
+                              {curriculum.track ? ` - المسار: ${resolveReferenceValue(
+                                { key: "track", label: "المسار", type: "select", options: trackOptions },
+                                curriculum.track,
+                                references,
+                              )}` : ""}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
                               المعلم:{" "}
                               {formatCellValue(
                                 teacher?.fullName ?? curriculum.teacherId ?? "غير محدد",
@@ -907,11 +997,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                         );
                       })}
                     </div>
-                  ) : (
-                    <p className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                      لا توجد مناهج مرتبطة بهذه المرحلة بعد.
-                    </p>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
