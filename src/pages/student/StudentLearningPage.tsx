@@ -282,8 +282,15 @@ export function StudentLearningPage({ view }: { view: string }) {
               <article key={block.id} className="surface p-5">
                 <p className="text-xs font-bold text-learning-blue">{formatCellValue(block.type)}</p>
                 <h2 className="mt-2 text-lg font-black text-slate-950">{formatCellValue(block.title)}</h2>
+                {block.type === "image" && block.url ? (
+                  <img
+                    className="mt-3 max-h-96 w-full rounded-lg border border-slate-200 object-contain"
+                    src={String(block.url)}
+                    alt={String(block.title ?? "???? ?????")}
+                  />
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{formatCellValue(block.content)}</p>
-                {block.url ? (
+                {block.url && block.type !== "image" ? (
                   <a className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue" href={String(block.url)} target="_blank" rel="noreferrer">
                     <LinkIcon size={16} />
                     ??? ??????
