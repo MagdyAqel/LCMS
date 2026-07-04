@@ -1,7 +1,6 @@
 import {
   BookOpen,
   CheckCircle2,
-  FileText,
   Link as LinkIcon,
   Mail,
   Send,
@@ -11,12 +10,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { collection, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
-import {
-  getSubjectsForGrade,
-  gradeOptions,
-  requiresTrack,
-  trackOptions,
-} from "../../data/curriculumCatalog";
+import { getSubjectsForGrade, gradeOptions, requiresTrack } from "../../data/curriculumCatalog";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../lib/firebase";
 import { createRecord, type AppRecord } from "../../services/records";
@@ -83,73 +77,64 @@ function useLessonsForTeachers(teacherIds: string[]) {
   return records;
 }
 
+function getRecordStringArray(record: AppRecord | null, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
+}
+
 export function StudentLearningPage({ view }: { view: string }) {
   const { appUser } = useAuth();
-  const gradeParam = useQueryParam("gradeId");
-  const trackParam = useQueryParam("track");
-  const subjectParam = useQueryParam("subject");
   const lessonId = useQueryParam("lessonId");
   const quizId = useQueryParam("quizId");
   const [studentProfile, setStudentProfile] = useState<AppRecord | null>(null);
-  const [gradeId, setGradeId] = useState(gradeParam ?? "1");
-  const [track, setTrack] = useState(trackParam ?? "");
   const [notifications, setNotifications] = useState<AppRecord[]>([]);
   const [messages, setMessages] = useState<AppRecord[]>([]);
-  const [activeSubject, setActiveSubject] = useState(subjectParam ?? "");
+  const [activeSubject, setActiveSubject] = useState("");
+  const [activeLessonId, setActiveLessonId] = useState("");
   const [messageSubject, setMessageSubject] = useState("");
   const [message, setMessage] = useState("");
   const [receiverId, setReceiverId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+
+  const gradeId = String(studentProfile?.gradeId ?? "");
+  const track = String(studentProfile?.track ?? "");
   const showTrack = requiresTrack(gradeId);
-  const assignedSubject = String(studentProfile?.curriculumSubject ?? "");
   const assignedTeacherIds = useMemo(() => {
     const ids = [
-      ...(Array.isArray(studentProfile?.teacherIds) ? studentProfile.teacherIds : []),
+      ...getRecordStringArray(studentProfile, "teacherIds"),
       studentProfile?.teacherId,
     ];
-    return ids.map((id) => String(id ?? "")).filter(Boolean);
+    return Array.from(new Set(ids.map((id) => String(id ?? "").trim()).filter(Boolean)));
   }, [studentProfile]);
-  const subjects = useMemo(
-    () => {
-      const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
-      return assignedSubject && gradeSubjects.includes(assignedSubject)
-        ? [assignedSubject]
-        : gradeSubjects;
-    },
-    [assignedSubject, gradeId, showTrack, track],
-  );
-  const selectedSubject = subjectParam ?? activeSubject ?? subjects[0] ?? "";
-  const lessonsByGrade = useLessonsForTeachers(assignedTeacherIds);
-  const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", lessonId);
-  const quizzes = useCollectionByField("quizzes", "lessonId", lessonId);
+  const assignedSubjects = useMemo(() => {
+    const subjects = [
+      ...getRecordStringArray(studentProfile, "curriculumSubjects"),
+      studentProfile?.curriculumSubject,
+    ];
+    return Array.from(
+      new Set(subjects.map((subject) => String(subject ?? "").trim()).filter(Boolean)),
+    );
+  }, [studentProfile]);
+  const availableSubjects = useMemo(() => {
+    const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
+    return assignedSubjects.filter((subject) => gradeSubjects.includes(subject));
+  }, [assignedSubjects, gradeId, showTrack, track]);
+  const selectedSubject = activeSubject || availableSubjects[0] || "";
+  const lessons = useLessonsForTeachers(assignedTeacherIds);
   const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
-  const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
 
   useEffect(() => {
-    if (!showTrack) {
-      setTrack("");
-    }
-  }, [showTrack]);
-
-  useEffect(() => {
-    if (!subjects.length) {
+    if (!availableSubjects.length) {
       setActiveSubject("");
       return;
     }
 
-    if (!subjects.includes(selectedSubject)) {
-      setActiveSubject(subjects[0]);
+    if (!availableSubjects.includes(selectedSubject)) {
+      setActiveSubject(availableSubjects[0]);
     }
-  }, [selectedSubject, subjects]);
-
-  useEffect(() => {
-    if (gradeParam) {
-      setGradeId(gradeParam);
-    }
-    if (trackParam) {
-      setTrack(trackParam);
-    }
-  }, [gradeParam, trackParam]);
+  }, [availableSubjects, selectedSubject]);
 
   useEffect(() => {
     if (!appUser) {
@@ -184,36 +169,40 @@ export function StudentLearningPage({ view }: { view: string }) {
     return () => unsubs.forEach((unsubscribe) => unsubscribe());
   }, [appUser]);
 
-  useEffect(() => {
-    const profileGrade = String(studentProfile?.gradeId ?? "");
-    const profileTrack = String(studentProfile?.track ?? "");
-
-    if (!gradeParam && profileGrade) {
-      setGradeId(profileGrade);
-    }
-    if (!trackParam && requiresTrack(profileGrade) && profileTrack) {
-      setTrack(profileTrack);
-    }
-  }, [gradeParam, studentProfile, trackParam]);
-
   const subjectLessons = useMemo(
     () =>
-      lessonsByGrade
+      lessons
         .filter((lesson) => {
-          const lessonSubject = String(lesson.subject ?? "");
-          const lessonTrack = String(lesson.track ?? "");
           const lessonTeacherId = String(lesson.teacherId ?? "");
           return (
             String(lesson.gradeId ?? "") === gradeId &&
-            lessonSubject === selectedSubject &&
-            (!requiresTrack(gradeId) || lessonTrack === track) &&
-            (!assignedTeacherIds.length ||
-              assignedTeacherIds.includes(lessonTeacherId))
+            String(lesson.subject ?? "") === selectedSubject &&
+            (!showTrack || String(lesson.track ?? "") === track) &&
+            assignedTeacherIds.includes(lessonTeacherId)
           );
         })
         .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
-    [assignedTeacherIds, gradeId, lessonsByGrade, selectedSubject, track],
+    [assignedTeacherIds, gradeId, lessons, selectedSubject, showTrack, track],
   );
+  const selectedLesson =
+    subjectLessons.find((item) => item.id === (lessonId ?? activeLessonId)) ??
+    subjectLessons.find((item) => item.id === activeLessonId) ??
+    subjectLessons[0];
+  const selectedLessonId = selectedLesson?.id ?? lessonId ?? "";
+  const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", selectedLessonId);
+  const quizzes = useCollectionByField("quizzes", "lessonId", selectedLessonId);
+  const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
+
+  useEffect(() => {
+    if (!subjectLessons.length) {
+      setActiveLessonId("");
+      return;
+    }
+
+    if (!subjectLessons.some((item) => item.id === activeLessonId)) {
+      setActiveLessonId(subjectLessons[0].id);
+    }
+  }, [activeLessonId, subjectLessons]);
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -230,7 +219,7 @@ export function StudentLearningPage({ view }: { view: string }) {
         subject: messageSubject,
         message,
         status: "new",
-        lessonId: lessonId ?? "",
+        lessonId: selectedLessonId,
       },
       appUser,
     );
@@ -252,8 +241,8 @@ export function StudentLearningPage({ view }: { view: string }) {
       "quizAttempts",
       {
         quizId: selectedQuiz.id,
-        lessonId: selectedQuiz.lessonId ?? "",
-        teacherId: selectedQuiz.teacherId ?? "",
+        lessonId: selectedQuiz.lessonId ?? selectedLessonId,
+        teacherId: selectedQuiz.teacherId ?? selectedLesson?.teacherId ?? "",
         studentId: appUser.uid,
         score: passingScore,
         percentage: passingScore,
@@ -272,9 +261,10 @@ export function StudentLearningPage({ view }: { view: string }) {
         <div className="surface p-5">
           <p className="text-lg font-black text-slate-950">{appUser?.displayName}</p>
           <p className="mt-1 text-sm text-slate-500">{appUser?.username ?? appUser?.email}</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <MiniMetric label="????" value={formatCellValue(studentProfile?.gradeId ?? gradeId)} />
-            <MiniMetric label="??????" value={formatCellValue(studentProfile?.track ?? "?? ????")} />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <MiniMetric label="????" value={formatGrade(gradeId)} />
+            <MiniMetric label="??????" value={formatCellValue(showTrack ? track : "?? ????")} />
+            <MiniMetric label="???????" value={String(availableSubjects.length)} />
           </div>
         </div>
       </StudentShell>
@@ -316,44 +306,6 @@ export function StudentLearningPage({ view }: { view: string }) {
     );
   }
 
-  if (view === "lesson") {
-    return (
-      <StudentShell title="??? ?????" subtitle="????? ????? ???? ??? ????? ??????.">
-        {notice ? <Notice text={notice} /> : null}
-        <div className="space-y-3">
-          {lessonBlocks
-            .slice()
-            .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
-            .map((block) => (
-              <article key={block.id} className="surface p-5">
-                <p className="text-xs font-bold text-learning-blue">{formatCellValue(block.type)}</p>
-                <h2 className="mt-2 text-lg font-black text-slate-950">{formatCellValue(block.title)}</h2>
-                {block.type === "image" && block.url ? (
-                  <img
-                    className="mt-3 max-h-96 w-full rounded-lg border border-slate-200 object-contain"
-                    src={String(block.url)}
-                    alt={String(block.title ?? "???? ?????")}
-                  />
-                ) : null}
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{formatCellValue(block.content)}</p>
-                {block.url && block.type !== "image" ? (
-                  <a className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue" href={String(block.url)} target="_blank" rel="noreferrer">
-                    <LinkIcon size={16} />
-                    ??? ??????
-                  </a>
-                ) : null}
-              </article>
-            ))}
-        </div>
-        {quizzes.length ? (
-          <Link className="btn-primary mt-4" to={`/student/quiz?lessonId=${lessonId}&quizId=${quizzes[0].id}`}>
-            ??? ????????
-          </Link>
-        ) : null}
-      </StudentShell>
-    );
-  }
-
   if (view === "quiz") {
     return (
       <StudentShell title="????? ????????" subtitle="???? ??????? ???????? ????? ?????? ??????.">
@@ -387,118 +339,145 @@ export function StudentLearningPage({ view }: { view: string }) {
     );
   }
 
-  if (false && view === "course-detail") {
-    return (
-      <StudentShell title={selectedSubject || "?????? ???????"} subtitle="???? ??????? ???????? ????? ???????.">
-        <div className="space-y-3">
-          {subjectLessons.map((lesson) => (
-            <article key={lesson.id} className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-950">{formatCellValue(lesson.title)}</h2>
-                <p className="mt-1 text-sm text-slate-500">{formatCellValue(lesson.objectives ?? "????? ???? ????.")}</p>
+  return (
+    <StudentShell title="??????? ???????" subtitle="??????? ??????? ???? ????? ?????? ??.">
+      <section className="surface grid gap-3 p-5 sm:grid-cols-3">
+        <MiniMetric label="????" value={formatGrade(gradeId)} />
+        <MiniMetric label="??????" value={formatCellValue(showTrack ? track : "?? ????")} />
+        <MiniMetric label="????????" value={String(assignedTeacherIds.length)} />
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(260px,360px)_1fr]">
+        <section className="space-y-3">
+          {availableSubjects.map((subject) => (
+            <button
+              key={subject}
+              className={`surface w-full p-5 text-right transition ${
+                subject === selectedSubject ? "ring-2 ring-learning-blue" : ""
+              }`}
+              type="button"
+              onClick={() => setActiveSubject(subject)}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-learning-blue">{formatGrade(gradeId)}</p>
+                  <h2 className="mt-2 text-xl font-black text-slate-950">{subject}</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {subjectLessons.length} ??? ???? ?? ??????.
+                  </p>
+                </div>
+                <BookOpen className="text-learning-blue" size={26} />
               </div>
-              <Link className="btn-primary" to={`/student/lesson?lessonId=${lesson.id}`}>
-                ??? ?????
-              </Link>
-            </article>
+            </button>
           ))}
-        </div>
-        {!subjectLessons.length ? <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." /> : null}
-      </StudentShell>
-    );
+          {!availableSubjects.length ? (
+            <EmptyState text="?? ???? ????? ????? ?? ???. ???? ?? ?????? ??? ??????? ?????." />
+          ) : null}
+        </section>
+
+        {selectedSubject ? (
+          <section className="space-y-3">
+            <div className="surface p-5">
+              <p className="text-xs font-bold text-learning-blue">?????? ??????</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">
+                {selectedSubject}
+              </h2>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {subjectLessons.map((lesson) => (
+                <button
+                  key={lesson.id}
+                  className={`surface p-5 text-right ${
+                    lesson.id === selectedLesson?.id ? "ring-2 ring-learning-blue" : ""
+                  }`}
+                  type="button"
+                  onClick={() => setActiveLessonId(lesson.id)}
+                >
+                  <p className="text-xs font-bold text-slate-400">
+                    ????? {formatCellValue(lesson.order)}
+                  </p>
+                  <h3 className="mt-1 text-lg font-black text-slate-950">
+                    {formatCellValue(lesson.title)}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {formatCellValue(lesson.objectives ?? "????? ???? ????.")}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {!subjectLessons.length ? (
+              <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." />
+            ) : null}
+
+            {selectedLesson ? (
+              <section className="space-y-3">
+                <div className="surface p-5">
+                  <p className="text-xs font-bold text-learning-blue">??? ?????</p>
+                  <h2 className="mt-2 text-xl font-black text-slate-950">
+                    {formatCellValue(selectedLesson.title)}
+                  </h2>
+                </div>
+                <LessonBlocks blocks={lessonBlocks} />
+                {quizzes.length ? (
+                  <Link className="btn-primary" to={`/student/quiz?lessonId=${selectedLessonId}&quizId=${quizzes[0].id}`}>
+                    ??? ????????
+                  </Link>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+    </StudentShell>
+  );
+}
+
+function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
+  if (!blocks.length) {
+    return <EmptyState text="?? ???? ????? ???? ????? ???." />;
   }
 
   return (
-    <StudentShell title="??????? ???????" subtitle="???? ???? ????? ??????? ?????? ??.">
-      <section className="surface grid gap-4 p-5 md:grid-cols-2">
-        <label className="block space-y-2">
-          <span className="form-label">????</span>
-          <select className="form-input" value={gradeId} onChange={(event) => setGradeId(event.target.value)}>
-            {gradeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {showTrack ? (
-          <label className="block space-y-2">
-            <span className="form-label">??????</span>
-            <select className="form-input" value={track} onChange={(event) => setTrack(event.target.value)}>
-              <option value="">???? ??????</option>
-              {trackOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {subjects.map((item) => (
-          <article key={item} className="surface p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold text-learning-blue">{gradeOptions.find((grade) => grade.value === gradeId)?.label}</p>
-                <h2 className="mt-2 text-xl font-black text-slate-950">{item}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">???? ?????? ??????? ??? ???? ???????.</p>
-              </div>
-              <BookOpen className="text-learning-blue" size={26} />
-            </div>
-            <button
-              className="btn-primary mt-5"
-              type="button"
-              onClick={() => setActiveSubject(item)}
-            >
-              ???? ???????
-            </button>
+    <div className="space-y-3">
+      {blocks
+        .slice()
+        .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
+        .map((block) => (
+          <article key={block.id} className="surface p-5">
+            <p className="text-xs font-bold text-learning-blue">{formatCellValue(block.type)}</p>
+            <h2 className="mt-2 text-lg font-black text-slate-950">{formatCellValue(block.title)}</h2>
+            {block.type === "image" && block.url ? (
+              <img
+                className="mt-3 max-h-96 w-full rounded-lg border border-slate-200 object-contain"
+                src={String(block.url)}
+                alt={String(block.title ?? "???? ?????")}
+              />
+            ) : null}
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+              {formatCellValue(block.content)}
+            </p>
+            {block.url && block.type !== "image" ? (
+              <a
+                className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue"
+                href={String(block.url)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <LinkIcon size={16} />
+                ??? ??????
+              </a>
+            ) : null}
           </article>
         ))}
-      </div>
+    </div>
+  );
+}
 
-      {selectedSubject ? (
-        <section className="space-y-3">
-          <div className="surface p-5">
-            <p className="text-xs font-bold text-learning-blue">?????? ???????</p>
-            <h2 className="mt-2 text-2xl font-black text-slate-950">
-              {selectedSubject}
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              {subjectLessons.length} ??? ????? ???? ???????.
-            </p>
-          </div>
-
-          {subjectLessons.map((lesson) => (
-            <article
-              key={lesson.id}
-              className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="text-xs font-bold text-slate-400">
-                  ????? {formatCellValue(lesson.order)}
-                </p>
-                <h3 className="mt-1 text-lg font-black text-slate-950">
-                  {formatCellValue(lesson.title)}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {formatCellValue(lesson.objectives ?? "????? ???? ????.")}
-                </p>
-              </div>
-              <Link className="btn-primary" to={`/student/lesson?lessonId=${lesson.id}`}>
-                ??? ?????
-              </Link>
-            </article>
-          ))}
-
-          {!subjectLessons.length ? (
-            <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." />
-          ) : null}
-        </section>
-      ) : null}
-      {!subjects.length ? <EmptyState text="???? ?????? ???? ????? ????." /> : null}
-    </StudentShell>
+function formatGrade(gradeId: string) {
+  return formatCellValue(
+    gradeOptions.find((grade) => grade.value === gradeId)?.label ?? gradeId,
   );
 }
 

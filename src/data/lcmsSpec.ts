@@ -379,7 +379,10 @@ const allStudentModules: SpecModule[] = [
   },
 ];
 
-const hiddenStudentModulePaths = new Set(["/student/course-detail"]);
+const hiddenStudentModulePaths = new Set([
+  "/student/course-detail",
+  "/student/lesson",
+]);
 
 export const studentModules: SpecModule[] = allStudentModules.filter(
   (module) => !hiddenStudentModulePaths.has(module.path),
