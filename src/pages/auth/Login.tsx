@@ -46,7 +46,7 @@ export function Login() {
         ) : null}
 
         <label className="block space-y-2">
-          <span className="form-label">اسم المستخدم أو البريد الإلكتروني</span>
+          <span className="form-label">اسم المستخدم</span>
           <input
             className="form-input"
             type="text"
