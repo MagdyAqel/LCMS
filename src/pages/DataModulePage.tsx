@@ -32,6 +32,7 @@ import {
   type AppRecord,
 } from "../services/records";
 import { createManagedAccount } from "../services/accounts";
+import { isDemoUser } from "../services/demoAuth";
 import { createSearchText, formatCellValue } from "../utils/format";
 import { exportRecordsToWorkbook, readWorkbookRows } from "../utils/excel";
 
@@ -194,6 +195,27 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     const unsubs: Unsubscribe[] = [];
 
     for (const collectionName of getReferenceCollections(config)) {
+      if (isDemoUser(appUser)) {
+        unsubs.push(
+          subscribeToRecords(
+            collectionName,
+            appUser,
+            appUser.role === "teacher" &&
+              teacherOwnedReferenceCollections.has(collectionName)
+              ? { type: "teacherOwned" }
+              : { type: "all" },
+            (items) => {
+              setReferences((current) => ({
+                ...current,
+                [collectionName]: items,
+              }));
+            },
+            () => undefined,
+          ),
+        );
+        continue;
+      }
+
       const constraints =
         appUser.role === "teacher" &&
         teacherOwnedReferenceCollections.has(collectionName)

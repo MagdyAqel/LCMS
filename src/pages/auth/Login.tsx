@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { AuthShell } from "./AuthShell";
 
 export function Login() {
-  const { firebaseUser, appUser, login, error, clearError } = useAuth();
+  const { appUser, login, error, clearError } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -17,7 +17,7 @@ export function Login() {
 
   useEffect(() => clearError, [clearError]);
 
-  if (firebaseUser && appUser) {
+  if (appUser) {
     return <Navigate to={from ?? "/dashboard"} replace />;
   }
 

@@ -15,6 +15,7 @@ import {
 import { db, firebaseConfig } from "../lib/firebase";
 import type { AppUser, UserRole } from "../types";
 import { normalizeUsername, usernameToEmail } from "../utils/username";
+import { getDemoAccounts, isDemoUser, registerDemoAccount } from "./demoAuth";
 
 type CreateManagedAccountInput = {
   username: string;
@@ -37,6 +38,19 @@ export async function findUsernameAccount(username: string) {
 
   if (!normalized) {
     return null;
+  }
+
+  const demoAccount = getDemoAccounts().find(
+    (account) => account.username === normalized,
+  );
+
+  if (demoAccount) {
+    return {
+      uid: demoAccount.uid,
+      username: normalized,
+      email: "",
+      role: demoAccount.role,
+    };
   }
 
   const snapshot = await getDoc(doc(db, "usernames", normalized));
@@ -71,6 +85,23 @@ export async function createManagedAccount({
 
   if (password.length < 6) {
     throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل.");
+  }
+
+  if (isDemoUser(createdBy)) {
+    const user = registerDemoAccount({
+      username: normalized,
+      password,
+      displayName,
+      role,
+      contactEmail,
+      disabled,
+    });
+
+    return {
+      uid: user.uid,
+      username: user.username ?? normalized,
+      email: "",
+    };
   }
 
   const existing = await findUsernameAccount(normalized);

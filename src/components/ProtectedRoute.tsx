@@ -5,17 +5,17 @@ import type { UserRole } from "../types";
 
 export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
   const location = useLocation();
-  const { firebaseUser, appUser, loading } = useAuth();
+  const { appUser, loading } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
   }
 
-  if (!firebaseUser) {
+  if (!appUser) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (!appUser || appUser.disabled) {
+  if (appUser.disabled) {
     return <Navigate to="/unauthorized" replace />;
   }
 
