@@ -22,6 +22,7 @@ import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
 import {
   getStageCatalog,
+  getSubjectsForGrade,
   gradeOptions,
   requiresTrack,
   trackOptions,
@@ -156,8 +157,25 @@ function getVisibleFormFields(
       return requiresTrack(values.gradeId);
     }
 
+    if (field.key === "curriculumSubject") {
+      const gradeId = String(values.gradeId ?? "");
+      const track = String(values.track ?? "");
+      return Boolean(gradeId) && (!requiresTrack(gradeId) || Boolean(track));
+    }
+
     return true;
   });
+}
+
+function getDynamicFieldOptions(field: FormField, values: Record<string, unknown>) {
+  if (field.key !== "curriculumSubject") {
+    return null;
+  }
+
+  return getSubjectsForGrade(values.gradeId, values.track).map((subject) => ({
+    label: subject,
+    value: subject,
+  }));
 }
 
 function getManagedRole(collectionName: string) {
@@ -318,6 +336,16 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       if (!requiresTrack(payload.gradeId)) {
         payload.track = "";
+      }
+
+      if (config.collection === "students") {
+        const allowedSubjects = getSubjectsForGrade(payload.gradeId, payload.track);
+        if (
+          payload.curriculumSubject &&
+          !allowedSubjects.includes(String(payload.curriculumSubject))
+        ) {
+          throw new Error("??????? ??????? ?? ???? ?? ??????. ???? ??????? ?? ??????? ??? ????? ????.");
+        }
       }
 
       if (typeof payload.studentIds === "string") {
@@ -690,13 +718,15 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
             {visibleFormFields.map((field) => {
               const value = formValues[field.key];
+              const dynamicOptions = getDynamicFieldOptions(field, formValues);
               const options =
-                field.reference && references[field.reference.collection]
+                dynamicOptions ??
+                (field.reference && references[field.reference.collection]
                   ? references[field.reference.collection].map((record) => ({
                       value: record.id,
                       label: formatCellValue(record[field.reference!.labelKey]),
                     }))
-                  : field.options ?? [];
+                  : field.options ?? []);
 
               return (
                 <label
@@ -730,7 +760,15 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                           ...(field.key === "gradeId" &&
                           event.target.value !== "11" &&
                           event.target.value !== "12"
-                            ? { track: "" }
+                            ? { track: "", curriculumSubject: "" }
+                            : {}),
+                          ...(field.key === "gradeId" &&
+                          (event.target.value === "11" ||
+                            event.target.value === "12")
+                            ? { curriculumSubject: "" }
+                            : {}),
+                          ...(field.key === "track"
+                            ? { curriculumSubject: "" }
                             : {}),
                         }))
                       }

@@ -72,9 +72,15 @@ export function StudentLearningPage({ view }: { view: string }) {
   const [receiverId, setReceiverId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const showTrack = requiresTrack(gradeId);
+  const assignedSubject = String(studentProfile?.curriculumSubject ?? "");
   const subjects = useMemo(
-    () => getSubjectsForGrade(gradeId, showTrack ? track : ""),
-    [gradeId, showTrack, track],
+    () => {
+      const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
+      return assignedSubject && gradeSubjects.includes(assignedSubject)
+        ? [assignedSubject]
+        : gradeSubjects;
+    },
+    [assignedSubject, gradeId, showTrack, track],
   );
   const selectedSubject = subjectParam ?? activeSubject ?? subjects[0] ?? "";
   const lessonsByGrade = useCollectionByField("lessons", "gradeId", gradeId);
