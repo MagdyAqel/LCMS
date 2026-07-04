@@ -99,6 +99,7 @@ function demoStudents() {
       studentId: user.uid,
       userId: user.uid,
       teacherId,
+      teacherIds: [teacherId],
       username: user.username,
       fullName: user.displayName,
       nationalId: `S-${String(index + 1).padStart(3, "0")}`,
@@ -162,7 +163,8 @@ function filterLocalRecords(records: AppRecord[], scope: RecordScope, user: AppU
   if (scope.type === "studentArray") {
     const field = scope.field ?? "studentIds";
     return records.filter(
-      (record) => Array.isArray(record[field]) && record[field].includes(user.uid),
+      (record) =>
+        Array.isArray(record[field]) && record[field].includes(user.uid),
     );
   }
 

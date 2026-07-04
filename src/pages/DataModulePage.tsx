@@ -190,6 +190,17 @@ function getManagedRole(collectionName: string) {
   return null;
 }
 
+function uniqueStrings(values: unknown[]) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 export function DataModulePage({ config }: { config: ModuleConfig }) {
   const { appUser } = useAuth();
   const [records, setRecords] = useState<AppRecord[]>([]);
@@ -262,7 +273,9 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       const constraints =
         appUser.role === "teacher" &&
         teacherOwnedReferenceCollections.has(collectionName)
-          ? [where("teacherId", "==", appUser.uid)]
+          ? collectionName === "students"
+            ? [where("teacherIds", "array-contains", appUser.uid)]
+            : [where("teacherId", "==", appUser.uid)]
           : [];
 
       const refQuery = constraints.length
@@ -365,6 +378,12 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       if (config.collection === "messages" && !editing) {
         payload.senderId = appUser.uid;
+      }
+
+      if (config.collection === "students" && appUser.role === "teacher") {
+        const existingTeacherIds = editing?.teacherIds ?? editing?.teacherId ?? [];
+        payload.teacherId = String(editing?.teacherId ?? payload.teacherId ?? appUser.uid);
+        payload.teacherIds = uniqueStrings([existingTeacherIds, payload.teacherId, appUser.uid]);
       }
 
       if (editing) {
@@ -527,6 +546,12 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         if (config.ownerField) {
           payload[config.ownerField] = appUser.uid;
         }
+
+        if (config.collection === "students" && appUser.role === "teacher") {
+          payload.teacherId = String(payload.teacherId ?? appUser.uid);
+          payload.teacherIds = uniqueStrings([payload.teacherId, appUser.uid]);
+        }
+
         const managedRole = getManagedRole(config.collection);
 
         if (managedRole && payload.username && row.password) {

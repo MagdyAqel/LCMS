@@ -31,11 +31,23 @@ service cloud.firestore {
     }
 
     function isTeacherOwner() {
-      return isTeacher() && resource.data.teacherId == request.auth.uid;
+      return isTeacher() && (
+        resource.data.teacherId == request.auth.uid
+        || (
+          resource.data.teacherIds is list
+          && request.auth.uid in resource.data.teacherIds
+        )
+      );
     }
 
     function createsTeacherOwned() {
-      return isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      return isTeacher() && (
+        request.resource.data.teacherId == request.auth.uid
+        || (
+          request.resource.data.teacherIds is list
+          && request.auth.uid in request.resource.data.teacherIds
+        )
+      );
     }
 
     function studentCanReadAssignedRecord() {
@@ -46,14 +58,26 @@ service cloud.firestore {
 
     function studentCanReadCourse(courseId) {
       return isStudent()
+        && courseId is string
         && get(/databases/$(database)/documents/teacherCourses/$(courseId))
           .data.studentIds.hasAny([request.auth.uid]);
     }
 
+    function studentCanReadTeacherRecord(teacherId) {
+      return isStudent()
+        && get(/databases/$(database)/documents/students/$(request.auth.uid))
+          .data.teacherIds.hasAny([teacherId]);
+    }
+
     function studentCanReadLesson(lessonId) {
       return isStudent()
-        && studentCanReadCourse(
-          get(/databases/$(database)/documents/lessons/$(lessonId)).data.courseId
+        && (
+          studentCanReadTeacherRecord(
+            get(/databases/$(database)/documents/lessons/$(lessonId)).data.teacherId
+          )
+          || studentCanReadCourse(
+            get(/databases/$(database)/documents/lessons/$(lessonId)).data.courseId
+          )
         );
     }
 
@@ -172,6 +196,7 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if isAdmin()
         || isTeacherOwner()
+        || studentCanReadTeacherRecord(resource.data.teacherId)
         || studentCanReadCourse(resource.data.courseId);
       allow create: if isAdmin() || createsTeacherOwned();
       allow update, delete: if isAdmin() || isTeacherOwner();
@@ -188,6 +213,7 @@ service cloud.firestore {
     match /quizzes/{quizId} {
       allow read: if isAdmin()
         || isTeacherOwner()
+        || studentCanReadTeacherRecord(resource.data.teacherId)
         || studentCanReadCourse(resource.data.courseId)
         || studentCanReadLesson(resource.data.lessonId);
       allow create: if isAdmin() || createsTeacherOwned();

@@ -54,6 +54,35 @@ function useCollectionByField(
   return records;
 }
 
+function useLessonsForTeachers(teacherIds: string[]) {
+  const [records, setRecords] = useState<AppRecord[]>([]);
+
+  useEffect(() => {
+    if (!teacherIds.length) {
+      setRecords([]);
+      return;
+    }
+
+    const lessonsById = new Map<string, AppRecord>();
+    const unsubs = teacherIds.map((teacherId) =>
+      onSnapshot(
+        query(collection(db, "lessons"), where("teacherId", "==", teacherId)),
+        (snapshot) => {
+          for (const item of snapshot.docs) {
+            lessonsById.set(item.id, { id: item.id, ...item.data() });
+          }
+          setRecords(Array.from(lessonsById.values()));
+        },
+        () => undefined,
+      ),
+    );
+
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }, [teacherIds]);
+
+  return records;
+}
+
 export function StudentLearningPage({ view }: { view: string }) {
   const { appUser } = useAuth();
   const gradeParam = useQueryParam("gradeId");
@@ -73,6 +102,13 @@ export function StudentLearningPage({ view }: { view: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const showTrack = requiresTrack(gradeId);
   const assignedSubject = String(studentProfile?.curriculumSubject ?? "");
+  const assignedTeacherIds = useMemo(() => {
+    const ids = [
+      ...(Array.isArray(studentProfile?.teacherIds) ? studentProfile.teacherIds : []),
+      studentProfile?.teacherId,
+    ];
+    return ids.map((id) => String(id ?? "")).filter(Boolean);
+  }, [studentProfile]);
   const subjects = useMemo(
     () => {
       const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
@@ -83,7 +119,7 @@ export function StudentLearningPage({ view }: { view: string }) {
     [assignedSubject, gradeId, showTrack, track],
   );
   const selectedSubject = subjectParam ?? activeSubject ?? subjects[0] ?? "";
-  const lessonsByGrade = useCollectionByField("lessons", "gradeId", gradeId);
+  const lessonsByGrade = useLessonsForTeachers(assignedTeacherIds);
   const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", lessonId);
   const quizzes = useCollectionByField("quizzes", "lessonId", lessonId);
   const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
@@ -166,13 +202,17 @@ export function StudentLearningPage({ view }: { view: string }) {
         .filter((lesson) => {
           const lessonSubject = String(lesson.subject ?? "");
           const lessonTrack = String(lesson.track ?? "");
+          const lessonTeacherId = String(lesson.teacherId ?? "");
           return (
+            String(lesson.gradeId ?? "") === gradeId &&
             lessonSubject === selectedSubject &&
-            (!requiresTrack(gradeId) || lessonTrack === track)
+            (!requiresTrack(gradeId) || lessonTrack === track) &&
+            (!assignedTeacherIds.length ||
+              assignedTeacherIds.includes(lessonTeacherId))
           );
         })
         .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
-    [gradeId, lessonsByGrade, selectedSubject, track],
+    [assignedTeacherIds, gradeId, lessonsByGrade, selectedSubject, track],
   );
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
