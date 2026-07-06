@@ -211,7 +211,18 @@ service cloud.firestore {
           )
         )
         || isTeacherOwner();
-      allow create: if isAdmin() || createsTeacherOwned();
+      allow create: if isAdmin()
+        || createsTeacherOwned()
+        || (
+          isStudent()
+          && studentId == request.auth.uid
+          && request.resource.data.studentId == request.auth.uid
+          && request.resource.data.username is string
+          && get(/databases/$(database)/documents/usernames/$(request.resource.data.username))
+            .data.uid == request.auth.uid
+          && get(/databases/$(database)/documents/usernames/$(request.resource.data.username))
+            .data.createdBy == request.resource.data.teacherId
+        );
       allow update: if isAdmin() || isTeacherOwner();
       allow delete: if isAdmin() || isTeacherOwner();
     }

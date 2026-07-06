@@ -12,6 +12,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
   collection,
   doc,
+  getDoc,
+  getDocs,
   increment,
   onSnapshot,
   query,
@@ -356,6 +358,84 @@ export function StudentLearningPage({ view }: { view: string }) {
 
     return () => unsubs.forEach((unsubscribe) => unsubscribe());
   }, [accountUsername, appUser]);
+
+  useEffect(() => {
+    if (!appUser || studentProfile || !accountUsername) {
+      return;
+    }
+
+    let cancelled = false;
+    const currentUser = appUser;
+
+    async function repairMissingStudentProfile() {
+      try {
+        const usernameSnapshot = await getDoc(doc(db, "usernames", accountUsername));
+        if (!usernameSnapshot.exists()) {
+          return;
+        }
+
+        const usernameData = usernameSnapshot.data();
+        const teacherId = String(usernameData.createdBy ?? "");
+        if (
+          String(usernameData.uid ?? "") !== currentUser.uid ||
+          String(usernameData.role ?? "") !== "student" ||
+          !teacherId
+        ) {
+          return;
+        }
+
+        const lessonsSnapshot = await getDocs(
+          query(
+            collection(db, "lessons"),
+            where("teacherId", "==", teacherId),
+            where("status", "==", "published"),
+          ),
+        );
+        const teacherLessons: AppRecord[] = lessonsSnapshot.docs.map((item) => ({
+          id: item.id,
+          ...item.data(),
+        }));
+        const firstLesson = teacherLessons[0];
+
+        const payload = {
+          studentId: currentUser.uid,
+          userId: currentUser.uid,
+          username: accountUsername,
+          authEmail: currentUser.email ?? "",
+          fullName: currentUser.displayName,
+          teacherId,
+          teacherIds: [teacherId],
+          gradeId: String(firstLesson?.gradeId ?? ""),
+          track: String(firstLesson?.track ?? ""),
+          curriculumSubject: String(firstLesson?.subject ?? ""),
+          curriculumSubjects: Array.from(
+            new Set(
+              teacherLessons
+                .map((lesson) => String(lesson.subject ?? "").trim())
+                .filter(Boolean),
+            ),
+          ),
+          status: "active",
+          createdFrom: "student-login-repair",
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(db, "students", currentUser.uid), payload, { merge: true });
+
+        if (!cancelled) {
+          setStudentProfile({ id: currentUser.uid, ...payload });
+        }
+      } catch {
+        // The visible warning on the page is enough; failed repair should not block navigation.
+      }
+    }
+
+    repairMissingStudentProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountUsername, appUser, studentProfile]);
 
   const subjectLessons = useMemo(
     () =>
