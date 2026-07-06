@@ -199,6 +199,7 @@ service cloud.firestore {
 
     match /students/{studentId} {
       allow read: if isAdmin()
+        || (isStudent() && studentId == request.auth.uid)
         || isOwner(resource.data.userId)
         || isOwner(resource.data.studentId)
         || (
