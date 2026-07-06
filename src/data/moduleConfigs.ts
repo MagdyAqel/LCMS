@@ -128,6 +128,15 @@ const stageSeeds = [
   { name: "رياض الأطفال", description: "مرحلة الطفولة المبكرة", order: 4, status: "active" },
 ];
 
+const settingsSeeds = [
+  {
+    key: "showStudentPasswordsToTeachers",
+    value: "false",
+    description: "إظهار أو إخفاء كلمة مرور الطالب للمعلم في إدارة الطلاب. استخدم true للإظهار و false للإخفاء.",
+    status: "active",
+  },
+];
+
 const allModuleConfigs: ModuleConfig[] = [
   {
     path: "/admin/teachers",
@@ -294,7 +303,7 @@ const allModuleConfigs: ModuleConfig[] = [
     roles: ["teacher"],
     scope: { type: "studentArray", field: "teacherIds" },
     ownerField: "teacherId",
-    tableFields: ["fullName", "username", "nationalId", "gradeId", "track", "curriculumSubject", "whatsappNumber", "status"],
+    tableFields: ["fullName", "username", "password", "nationalId", "gradeId", "track", "curriculumSubject", "whatsappNumber", "status"],
     searchableFields: ["fullName", "username", "nationalId", "whatsappNumber", "email"],
     formFields: studentFormFields,
   },
@@ -501,6 +510,7 @@ const allModuleConfigs: ModuleConfig[] = [
     collection: "systemSettings",
     roles: ["admin"],
     scope: { type: "all" },
+    seedRecords: settingsSeeds,
     tableFields: ["key", "value", "description", "status"],
     searchableFields: ["key", "value", "description"],
     formFields: [

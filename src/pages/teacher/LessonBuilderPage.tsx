@@ -283,6 +283,14 @@ export function LessonBuilderPage() {
     document.execCommand(command, false, value);
   }
 
+  function applyRichTextColor(command: "foreColor" | "hiliteColor", value: string) {
+    if (!value) {
+      return;
+    }
+
+    document.execCommand(command, false, value);
+  }
+
   function resetLessonForm() {
     setEditingLessonId("");
     setLessonTitle("");
@@ -1042,6 +1050,28 @@ export function LessonBuilderPage() {
                       <option value="h2">عنوان كبير</option>
                       <option value="h3">عنوان فرعي</option>
                     </select>
+                    <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
+                      لون الخط
+                      <input
+                        className="h-6 w-8 cursor-pointer border-0 bg-transparent p-0"
+                        type="color"
+                        defaultValue="#0f172a"
+                        onInput={(event) =>
+                          applyRichTextColor("foreColor", event.currentTarget.value)
+                        }
+                      />
+                    </label>
+                    <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
+                      الخلفية
+                      <input
+                        className="h-6 w-8 cursor-pointer border-0 bg-transparent p-0"
+                        type="color"
+                        defaultValue="#ffffff"
+                        onInput={(event) =>
+                          applyRichTextColor("hiliteColor", event.currentTarget.value)
+                        }
+                      />
+                    </label>
                     {[
                       { command: "bold", label: "B" },
                       { command: "italic", label: "I" },
@@ -1064,7 +1094,8 @@ export function LessonBuilderPage() {
                     ))}
                   </div>
                   <div
-                    className="form-input min-h-32"
+                    className="form-input min-h-32 text-right leading-8"
+                    dir="rtl"
                     contentEditable
                     suppressContentEditableWarning
                     onInput={(event) => setBlockContent(event.currentTarget.innerHTML)}

@@ -233,6 +233,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [teacherProfile, setTeacherProfile] = useState<AppRecord | null>(null);
+  const [systemSettings, setSystemSettings] = useState<AppRecord[]>([]);
 
   useEffect(() => {
     if (!appUser) {
@@ -256,6 +257,21 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
     return unsubscribe;
   }, [appUser, config.collection, config.scope]);
+
+  useEffect(() => {
+    if (!appUser || appUser.role !== "teacher" || config.collection !== "students") {
+      setSystemSettings([]);
+      return;
+    }
+
+    return subscribeToRecords(
+      "systemSettings",
+      appUser,
+      { type: "all" },
+      setSystemSettings,
+      () => setSystemSettings([]),
+    );
+  }, [appUser, config.collection]);
 
   useEffect(() => {
     if (!appUser || appUser.role !== "teacher" || config.collection !== "students") {
@@ -360,6 +376,23 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     () => getVisibleFormFields(config.formFields, Boolean(editing), formValues),
     [config.formFields, editing, formValues],
   );
+  const showStudentPasswordsToTeachers = useMemo(() => {
+    const setting = systemSettings.find(
+      (item) => String(item.key ?? "") === "showStudentPasswordsToTeachers",
+    );
+    return String(setting?.value ?? "false").trim().toLowerCase() === "true";
+  }, [systemSettings]);
+  const tableFields = useMemo(() => {
+    if (
+      config.collection === "students" &&
+      appUser?.role === "teacher" &&
+      !showStudentPasswordsToTeachers
+    ) {
+      return config.tableFields.filter((field) => field !== "password");
+    }
+
+    return config.tableFields;
+  }, [appUser?.role, config.collection, config.tableFields, showStudentPasswordsToTeachers]);
 
   const teacherStudentSubjects = useMemo(() => {
     if (config.collection !== "students" || appUser?.role !== "teacher") {
@@ -496,6 +529,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       }
 
       if (config.collection === "students") {
+        payload.status = String(payload.status ?? "") || "active";
         const allowedSubjects = getSubjectsForGrade(payload.gradeId, payload.track);
         if (!payload.curriculumSubject) {
           throw new Error("اختر المنهاج المرتبط بصف الطالب قبل الحفظ.");
@@ -575,7 +609,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             disabled: payload.status === "inactive",
           });
 
-          if (config.collection !== "teachers") {
+          if (config.collection !== "teachers" && config.collection !== "students") {
             delete payload.password;
           }
           payload.username = account.username;
@@ -738,7 +772,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             disabled: payload.status === "inactive",
           });
 
-          if (config.collection !== "teachers") {
+          if (config.collection !== "teachers" && config.collection !== "students") {
             delete payload.password;
           }
           payload.username = account.username;
@@ -769,7 +803,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     }
   }
 
-  const columns = config.tableFields.map((key) => ({
+  const columns = tableFields.map((key) => ({
     key,
     label: getFieldLabel(config, key),
   }));
@@ -1138,7 +1172,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
           <table className="w-full min-w-[760px] text-right text-sm">
             <thead className="bg-slate-50 text-xs font-bold text-slate-500">
               <tr>
-                {config.tableFields.map((key) => (
+                {tableFields.map((key) => (
                   <th key={key} className="px-5 py-3">
                     {getFieldLabel(config, key)}
                   </th>
@@ -1149,7 +1183,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.map((record) => (
                 <tr key={record.id} className="bg-white">
-                  {config.tableFields.map((key) => {
+                  {tableFields.map((key) => {
                     const field = config.formFields.find((item) => item.key === key);
                     return (
                       <td key={key} className="max-w-60 px-5 py-4 align-top">

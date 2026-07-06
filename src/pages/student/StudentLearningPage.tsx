@@ -129,12 +129,35 @@ export function StudentLearningPage({ view }: { view: string }) {
       new Set(subjects.map((subject) => String(subject ?? "").trim()).filter(Boolean)),
     );
   }, [studentProfile]);
+  const lessons = useLessonsForTeachers(assignedTeacherIds);
+  const publishedTeacherLessonSubjects = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          lessons
+            .filter(
+              (lesson) =>
+                String(lesson.gradeId ?? "") === gradeId &&
+                (!showTrack || String(lesson.track ?? "") === track) &&
+                assignedTeacherIds.includes(String(lesson.teacherId ?? "")) &&
+                String(lesson.status ?? "draft") === "published",
+            )
+            .map((lesson) => String(lesson.subject ?? "").trim())
+            .filter(Boolean),
+        ),
+      ),
+    [assignedTeacherIds, gradeId, lessons, showTrack, track],
+  );
   const availableSubjects = useMemo(() => {
     const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
-    return assignedSubjects.filter((subject) => gradeSubjects.includes(subject));
-  }, [assignedSubjects, gradeId, showTrack, track]);
+    const subjects = assignedSubjects.length
+      ? assignedSubjects
+      : publishedTeacherLessonSubjects;
+    return subjects.filter(
+      (subject) => gradeSubjects.includes(subject) || publishedTeacherLessonSubjects.includes(subject),
+    );
+  }, [assignedSubjects, gradeId, publishedTeacherLessonSubjects, showTrack, track]);
   const selectedSubject = activeSubject || availableSubjects[0] || "";
-  const lessons = useLessonsForTeachers(assignedTeacherIds);
   const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
 
   useEffect(() => {
@@ -642,7 +665,8 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
             ) : null}
             {block.type === "text" ? (
               <div
-                className="prose prose-sm mt-2 max-w-none text-slate-600"
+                className="prose prose-sm mt-2 max-w-none text-right leading-8 text-slate-600"
+                dir="rtl"
                 dangerouslySetInnerHTML={{ __html: String(block.content ?? "") }}
               />
             ) : (
