@@ -384,17 +384,37 @@ export function StudentLearningPage({ view }: { view: string }) {
           return;
         }
 
-        const lessonsSnapshot = await getDocs(
-          query(
-            collection(db, "lessons"),
-            where("teacherId", "==", teacherId),
-            where("status", "==", "published"),
-          ),
-        );
-        const teacherLessons: AppRecord[] = lessonsSnapshot.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }));
+        let teacherName = "";
+        let teacherLessons: AppRecord[] = [];
+
+        try {
+          const teacherSnapshot = await getDoc(doc(db, "teachers", teacherId));
+          if (teacherSnapshot.exists()) {
+            const teacherData = teacherSnapshot.data();
+            teacherName = String(
+              teacherData.fullName ?? teacherData.displayName ?? "",
+            );
+          }
+        } catch {
+          teacherName = "";
+        }
+
+        try {
+          const lessonsSnapshot = await getDocs(
+            query(
+              collection(db, "lessons"),
+              where("teacherId", "==", teacherId),
+              where("status", "==", "published"),
+            ),
+          );
+          teacherLessons = lessonsSnapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          }));
+        } catch {
+          teacherLessons = [];
+        }
+
         const firstLesson = teacherLessons[0];
 
         const payload = {
@@ -405,6 +425,8 @@ export function StudentLearningPage({ view }: { view: string }) {
           fullName: currentUser.displayName,
           teacherId,
           teacherIds: [teacherId],
+          teacherName,
+          teacherNames: teacherName ? [teacherName] : [],
           gradeId: String(firstLesson?.gradeId ?? ""),
           track: String(firstLesson?.track ?? ""),
           curriculumSubject: String(firstLesson?.subject ?? ""),
@@ -420,10 +442,14 @@ export function StudentLearningPage({ view }: { view: string }) {
           updatedAt: serverTimestamp(),
         };
 
-        await setDoc(doc(db, "students", currentUser.uid), payload, { merge: true });
-
         if (!cancelled) {
           setStudentProfile({ id: currentUser.uid, ...payload });
+        }
+
+        try {
+          await setDoc(doc(db, "students", currentUser.uid), payload, { merge: true });
+        } catch {
+          // The in-memory profile still lets the learner see the teacher's published content.
         }
       } catch {
         // The visible warning on the page is enough; failed repair should not block navigation.
