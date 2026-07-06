@@ -84,10 +84,30 @@ service cloud.firestore {
         );
     }
 
+    function studentCanReadPublishedTeacherGrade(teacherId, gradeId, track, status) {
+      let student = get(/databases/$(database)/documents/students/$(request.auth.uid)).data;
+      return isStudent()
+        && status == "published"
+        && student.teacherIds.hasAny([teacherId])
+        && student.gradeId == gradeId
+        && (
+          !("track" in student)
+          || track == ""
+          || student.track == track
+        );
+    }
+
     function studentCanReadLesson(lessonId) {
       let lesson = get(/databases/$(database)/documents/lessons/$(lessonId)).data;
       return isStudent()
         && (
+          studentCanReadPublishedTeacherGrade(
+            lesson.teacherId,
+            lesson.gradeId,
+            lesson.track,
+            lesson.status
+          )
+          ||
           studentCanReadTeacherGradeSubject(
             lesson.teacherId,
             lesson.gradeId,
@@ -220,6 +240,12 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if isAdmin()
         || isTeacherOwner()
+        || studentCanReadPublishedTeacherGrade(
+          resource.data.teacherId,
+          resource.data.gradeId,
+          resource.data.track,
+          resource.data.status
+        )
         || studentCanReadTeacherGradeSubject(
           resource.data.teacherId,
           resource.data.gradeId,

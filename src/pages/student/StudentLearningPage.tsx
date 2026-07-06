@@ -58,19 +58,34 @@ function useCollectionByField(
   return records;
 }
 
-function useLessonsForTeachers(teacherIds: string[]) {
+function useLessonsForTeachers(
+  teacherIds: string[],
+  gradeId: string,
+  track: string,
+  showTrack: boolean,
+) {
   const [records, setRecords] = useState<AppRecord[]>([]);
 
   useEffect(() => {
-    if (!teacherIds.length) {
+    if (!teacherIds.length || !gradeId) {
       setRecords([]);
       return;
     }
 
     const lessonsById = new Map<string, AppRecord>();
-    const unsubs = teacherIds.map((teacherId) =>
-      onSnapshot(
-        query(collection(db, "lessons"), where("teacherId", "==", teacherId)),
+    const unsubs = teacherIds.map((teacherId) => {
+      const constraints = [
+        where("teacherId", "==", teacherId),
+        where("gradeId", "==", gradeId),
+        where("status", "==", "published"),
+      ];
+
+      if (showTrack) {
+        constraints.push(where("track", "==", track));
+      }
+
+      return onSnapshot(
+        query(collection(db, "lessons"), ...constraints),
         (snapshot) => {
           for (const item of snapshot.docs) {
             lessonsById.set(item.id, { id: item.id, ...item.data() });
@@ -78,11 +93,11 @@ function useLessonsForTeachers(teacherIds: string[]) {
           setRecords(Array.from(lessonsById.values()));
         },
         () => undefined,
-      ),
-    );
+      );
+    });
 
     return () => unsubs.forEach((unsubscribe) => unsubscribe());
-  }, [teacherIds]);
+  }, [gradeId, showTrack, teacherIds, track]);
 
   return records;
 }
@@ -129,7 +144,7 @@ export function StudentLearningPage({ view }: { view: string }) {
       new Set(subjects.map((subject) => String(subject ?? "").trim()).filter(Boolean)),
     );
   }, [studentProfile]);
-  const lessons = useLessonsForTeachers(assignedTeacherIds);
+  const lessons = useLessonsForTeachers(assignedTeacherIds, gradeId, track, showTrack);
   const publishedTeacherLessonSubjects = useMemo(
     () =>
       Array.from(
@@ -150,9 +165,9 @@ export function StudentLearningPage({ view }: { view: string }) {
   );
   const availableSubjects = useMemo(() => {
     const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
-    const subjects = assignedSubjects.length
-      ? assignedSubjects
-      : publishedTeacherLessonSubjects;
+    const subjects = Array.from(
+      new Set([...assignedSubjects, ...publishedTeacherLessonSubjects]),
+    );
     return subjects.filter(
       (subject) => gradeSubjects.includes(subject) || publishedTeacherLessonSubjects.includes(subject),
     );
