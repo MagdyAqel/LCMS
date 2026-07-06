@@ -6,7 +6,6 @@ import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { UserManagement } from "./pages/admin/UserManagement";
-import { DemoAccountsPage } from "./pages/admin/DemoAccountsPage";
 import { Unauthorized } from "./pages/Unauthorized";
 import { NotFound } from "./pages/NotFound";
 import { SpecModulePage } from "./pages/SpecModulePage";
@@ -71,14 +70,6 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={["admin"]} />}>
-        <Route
-          path="/admin/demo-accounts"
-          element={
-            <WithLayout>
-              <DemoAccountsPage />
-            </WithLayout>
-          }
-        />
         <Route
           path="/admin/users"
           element={

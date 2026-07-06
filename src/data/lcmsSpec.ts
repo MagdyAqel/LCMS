@@ -398,7 +398,6 @@ const rawRoleNavigation: Record<UserRole, NavGroup[]> = {
       items: [
         { label: "لوحة التحكم", to: "/dashboard", roles: ["admin"] },
         { label: "المستخدمون", to: "/admin/users", roles: ["admin"] },
-        { label: "حسابات وهمية", to: "/admin/demo-accounts", roles: ["admin"] },
       ],
     },
     {
@@ -506,7 +505,6 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
       items: [
         { label: "لوحة التحكم", to: "/dashboard", roles: ["admin"] },
         { label: "المستخدمون", to: "/admin/users", roles: ["admin"] },
-        { label: "حسابات وهمية", to: "/admin/demo-accounts", roles: ["admin"] },
       ],
     },
     {

@@ -69,15 +69,39 @@ service cloud.firestore {
           .data.teacherIds.hasAny([teacherId]);
     }
 
+    function studentCanReadTeacherGradeSubject(teacherId, gradeId, track, subject) {
+      let student = get(/databases/$(database)/documents/students/$(request.auth.uid)).data;
+      return isStudent()
+        && student.teacherIds.hasAny([teacherId])
+        && student.gradeId == gradeId
+        && (!("track" in student) || student.track == track)
+        && (
+          student.curriculumSubject == subject
+          || (
+            student.curriculumSubjects is list
+            && subject in student.curriculumSubjects
+          )
+        );
+    }
+
     function studentCanReadLesson(lessonId) {
+      let lesson = get(/databases/$(database)/documents/lessons/$(lessonId)).data;
       return isStudent()
         && (
-          studentCanReadTeacherRecord(
-            get(/databases/$(database)/documents/lessons/$(lessonId)).data.teacherId
+          studentCanReadTeacherGradeSubject(
+            lesson.teacherId,
+            lesson.gradeId,
+            lesson.track,
+            lesson.subject
           )
-          || studentCanReadCourse(
-            get(/databases/$(database)/documents/lessons/$(lessonId)).data.courseId
-          )
+          || studentCanReadCourse(lesson.courseId)
+        );
+    }
+
+    function studentCanReadQuiz(quizId) {
+      return isStudent()
+        && studentCanReadLesson(
+          get(/databases/$(database)/documents/quizzes/$(quizId)).data.lessonId
         );
     }
 
@@ -196,7 +220,12 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if isAdmin()
         || isTeacherOwner()
-        || studentCanReadTeacherRecord(resource.data.teacherId)
+        || studentCanReadTeacherGradeSubject(
+          resource.data.teacherId,
+          resource.data.gradeId,
+          resource.data.track,
+          resource.data.subject
+        )
         || studentCanReadCourse(resource.data.courseId);
       allow create: if isAdmin() || createsTeacherOwned();
       allow update, delete: if isAdmin() || isTeacherOwner();
@@ -213,7 +242,12 @@ service cloud.firestore {
     match /quizzes/{quizId} {
       allow read: if isAdmin()
         || isTeacherOwner()
-        || studentCanReadTeacherRecord(resource.data.teacherId)
+        || studentCanReadTeacherGradeSubject(
+          resource.data.teacherId,
+          resource.data.gradeId,
+          resource.data.track,
+          resource.data.subject
+        )
         || studentCanReadCourse(resource.data.courseId)
         || studentCanReadLesson(resource.data.lessonId);
       allow create: if isAdmin() || createsTeacherOwned();
@@ -221,13 +255,17 @@ service cloud.firestore {
     }
 
     match /quizQuestions/{questionId} {
-      allow read: if signedIn();
+      allow read: if isAdmin()
+        || isTeacherOwner()
+        || studentCanReadQuiz(resource.data.quizId);
       allow create: if isAdmin() || createsTeacherOwned();
       allow update, delete: if isAdmin() || isTeacherOwner();
     }
 
     match /quizOptions/{optionId} {
-      allow read: if signedIn();
+      allow read: if isAdmin()
+        || isTeacherOwner()
+        || studentCanReadQuiz(resource.data.quizId);
       allow create: if isAdmin() || createsTeacherOwned();
       allow update, delete: if isAdmin() || isTeacherOwner();
     }

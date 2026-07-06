@@ -9,7 +9,17 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { collection, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  increment,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+  type Unsubscribe,
+} from "firebase/firestore";
 import { getSubjectsForGrade, gradeOptions, requiresTrack } from "../../data/curriculumCatalog";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../lib/firebase";
@@ -97,6 +107,8 @@ export function StudentLearningPage({ view }: { view: string }) {
   const [message, setMessage] = useState("");
   const [receiverId, setReceiverId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [trackedBlockIds, setTrackedBlockIds] = useState<string[]>([]);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
 
   const gradeId = String(studentProfile?.gradeId ?? "");
   const track = String(studentProfile?.track ?? "");
@@ -178,7 +190,8 @@ export function StudentLearningPage({ view }: { view: string }) {
             String(lesson.gradeId ?? "") === gradeId &&
             String(lesson.subject ?? "") === selectedSubject &&
             (!showTrack || String(lesson.track ?? "") === track) &&
-            assignedTeacherIds.includes(lessonTeacherId)
+            assignedTeacherIds.includes(lessonTeacherId) &&
+            String(lesson.status ?? "draft") === "published"
           );
         })
         .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
@@ -192,6 +205,54 @@ export function StudentLearningPage({ view }: { view: string }) {
   const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", selectedLessonId);
   const quizzes = useCollectionByField("quizzes", "lessonId", selectedLessonId);
   const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
+  const quizQuestions = useCollectionByField("quizQuestions", "quizId", selectedQuiz?.id);
+  const quizOptions = useCollectionByField("quizOptions", "quizId", selectedQuiz?.id);
+  const progressRecords = useCollectionByField("studentProgress", "studentId", appUser?.uid);
+  const publishedLessonBlocks = useMemo(
+    () => lessonBlocks.filter((block) => String(block.status ?? "draft") === "published"),
+    [lessonBlocks],
+  );
+
+  function lessonProgress(lesson: AppRecord) {
+    const lessonRows = progressRecords.filter((item) => item.lessonId === lesson.id);
+    const viewedBlocks = new Set(
+      lessonRows.map((item) => String(item.blockId ?? "")).filter(Boolean),
+    );
+    const totalBlocks =
+      lesson.id === selectedLessonId
+        ? publishedLessonBlocks.length
+        : Number(lessonRows[0]?.totalBlocks ?? 0);
+    return totalBlocks ? Math.round((viewedBlocks.size / totalBlocks) * 100) : 0;
+  }
+
+  function lessonPassed(lesson: AppRecord) {
+    const required = Number(lesson.requiredProgress ?? 80);
+    const passedQuiz = attempts.some(
+      (attempt) => attempt.lessonId === lesson.id && attempt.passed === true,
+    );
+    return lessonProgress(lesson) >= required || passedQuiz;
+  }
+
+  function canOpenLesson(lesson: AppRecord) {
+    if (lesson.learningMode !== "linear") {
+      return true;
+    }
+
+    const index = subjectLessons.findIndex((item) => item.id === lesson.id);
+    if (index <= 0) {
+      return true;
+    }
+
+    return lessonPassed(subjectLessons[index - 1]);
+  }
+
+  const completedLessons = subjectLessons.filter(lessonPassed).length;
+  const overallProgress = subjectLessons.length
+    ? Math.round(
+        subjectLessons.reduce((sum, lesson) => sum + lessonProgress(lesson), 0) /
+          subjectLessons.length,
+      )
+    : 0;
 
   useEffect(() => {
     if (!subjectLessons.length) {
@@ -203,6 +264,60 @@ export function StudentLearningPage({ view }: { view: string }) {
       setActiveLessonId(subjectLessons[0].id);
     }
   }, [activeLessonId, subjectLessons]);
+
+  useEffect(() => {
+    if (!appUser || !selectedLesson || !publishedLessonBlocks.length) {
+      return;
+    }
+
+    const totalBlocks = publishedLessonBlocks.length;
+    const unseenBlocks = publishedLessonBlocks.filter(
+      (block) => !trackedBlockIds.includes(block.id),
+    );
+
+    if (!unseenBlocks.length) {
+      return;
+    }
+
+    setTrackedBlockIds((current) => [
+      ...current,
+      ...unseenBlocks.map((block) => block.id),
+    ]);
+
+    unseenBlocks.forEach((block) => {
+      const progressId = `${appUser.uid}_${selectedLesson.id}_${block.id}`;
+      setDoc(
+        doc(db, "studentProgress", progressId),
+        {
+          studentId: appUser.uid,
+          teacherId: selectedLesson.teacherId ?? "",
+          lessonId: selectedLesson.id,
+          lessonTitle: selectedLesson.title ?? "",
+          gradeId,
+          track: showTrack ? track : "",
+          subject: selectedSubject,
+          blockId: block.id,
+          blockTitle: block.title ?? "",
+          blockType: block.type ?? "",
+          viewCount: increment(1),
+          totalBlocks,
+          progressPercent: Math.round(100 / Math.max(totalBlocks, 1)),
+          lastViewedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+  }, [
+    appUser,
+    gradeId,
+    publishedLessonBlocks,
+    selectedLesson,
+    selectedSubject,
+    showTrack,
+    track,
+    trackedBlockIds,
+  ]);
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -227,7 +342,7 @@ export function StudentLearningPage({ view }: { view: string }) {
     setMessageSubject("");
     setMessage("");
     setReceiverId("");
-    setNotice("?? ????? ???????.");
+    setNotice("تم إرسال الرسالة.");
   }
 
   async function submitQuizAttempt() {
@@ -236,6 +351,14 @@ export function StudentLearningPage({ view }: { view: string }) {
     }
 
     const passingScore = Number(selectedQuiz.passingScore ?? 70);
+    const correctCount = quizQuestions.filter((question) => {
+      const answerId = selectedAnswers[question.id];
+      const option = quizOptions.find((item) => item.id === answerId);
+      return option?.isCorrect === true;
+    }).length;
+    const percentage = quizQuestions.length
+      ? Math.round((correctCount / quizQuestions.length) * 100)
+      : passingScore;
 
     await createRecord(
       "quizAttempts",
@@ -244,27 +367,27 @@ export function StudentLearningPage({ view }: { view: string }) {
         lessonId: selectedQuiz.lessonId ?? selectedLessonId,
         teacherId: selectedQuiz.teacherId ?? selectedLesson?.teacherId ?? "",
         studentId: appUser.uid,
-        score: passingScore,
-        percentage: passingScore,
-        passed: true,
+        score: percentage,
+        percentage,
+        passed: percentage >= passingScore,
         attemptNumber: attempts.filter((item) => item.quizId === selectedQuiz.id).length + 1,
       },
       appUser,
     );
 
-    setNotice("?? ????? ?????? ???????? ?????.");
+    setNotice(percentage >= passingScore ? "تم اجتياز الاختبار بنجاح." : "تم تسجيل المحاولة. تحتاج درجة أعلى للاجتياز.");
   }
 
   if (view === "profile") {
     return (
-      <StudentShell title="????? ??????" subtitle="?????? ?????? ????? ????????.">
+      <StudentShell title="الملف الشخصي" subtitle="بيانات الحساب والصف التعليمي.">
         <div className="surface p-5">
           <p className="text-lg font-black text-slate-950">{appUser?.displayName}</p>
           <p className="mt-1 text-sm text-slate-500">{appUser?.username ?? appUser?.email}</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <MiniMetric label="????" value={formatGrade(gradeId)} />
-            <MiniMetric label="??????" value={formatCellValue(showTrack ? track : "?? ????")} />
-            <MiniMetric label="???????" value={String(availableSubjects.length)} />
+            <MiniMetric label="الصف" value={formatGrade(gradeId)} />
+            <MiniMetric label="المسار" value={formatCellValue(showTrack ? track : "لا يوجد")} />
+            <MiniMetric label="المناهج" value={String(availableSubjects.length)} />
           </div>
         </div>
       </StudentShell>
@@ -273,59 +396,97 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   if (view === "notifications") {
     return (
-      <StudentShell title="??????? ??????" subtitle="????????? ??????? ??????? ??????.">
-        <RecordList records={notifications} empty="?? ???? ??????? ??????." />
+      <StudentShell title="تنبيهات الطالب" subtitle="التنبيهات الفعالة الموجهة للطلاب.">
+        <RecordList records={notifications} empty="لا توجد تنبيهات حاليًا." />
       </StudentShell>
     );
   }
 
   if (view === "messages") {
     return (
-      <StudentShell title="????? ??????" subtitle="????? ????? ?????? ?????? ??????? ???????.">
+      <StudentShell title="رسائل الطالب" subtitle="إرسال رسالة للمعلم وقراءة الرسائل السابقة.">
         {notice ? <Notice text={notice} /> : null}
         <form className="surface grid gap-4 p-5 md:grid-cols-2" onSubmit={handleSendMessage}>
           <label className="block space-y-2">
-            <span className="form-label">????? ?????? ???????</span>
+            <span className="form-label">معرّف المعلم المستلم</span>
             <input className="form-input" value={receiverId} onChange={(e) => setReceiverId(e.target.value)} required />
           </label>
           <label className="block space-y-2">
-            <span className="form-label">???????</span>
+            <span className="form-label">الموضوع</span>
             <input className="form-input" value={messageSubject} onChange={(e) => setMessageSubject(e.target.value)} required />
           </label>
           <label className="block space-y-2 md:col-span-2">
-            <span className="form-label">???????</span>
+            <span className="form-label">الرسالة</span>
             <textarea className="form-input min-h-28" value={message} onChange={(e) => setMessage(e.target.value)} required />
           </label>
           <button className="btn-primary md:col-span-2" type="submit">
             <Send size={18} />
-            ?????
+            إرسال
           </button>
         </form>
-        <RecordList records={messages} empty="?? ???? ????? ?????." />
+        <RecordList records={messages} empty="لا توجد رسائل مرسلة." />
       </StudentShell>
     );
   }
 
   if (view === "quiz") {
     return (
-      <StudentShell title="????? ????????" subtitle="???? ??????? ???????? ????? ?????? ??????.">
+      <StudentShell title="تقديم الاختبار" subtitle="يعرض إعدادات الاختبار ويحفظ محاولة الطالب.">
         {notice ? <Notice text={notice} /> : null}
         {selectedQuiz ? (
           <section className="surface p-5">
             <h2 className="text-xl font-black text-slate-950">{formatCellValue(selectedQuiz.title)}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">{formatCellValue(selectedQuiz.description)}</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <MiniMetric label="???? ??????" value={formatCellValue(selectedQuiz.passingScore)} />
-              <MiniMetric label="?????????" value={formatCellValue(selectedQuiz.attemptsAllowed)} />
-              <MiniMetric label="????" value={formatCellValue(selectedQuiz.isActive)} />
+              <MiniMetric label="درجة النجاح" value={formatCellValue(selectedQuiz.passingScore)} />
+              <MiniMetric label="المحاولات" value={formatCellValue(selectedQuiz.attemptsAllowed)} />
+              <MiniMetric label="مفعل" value={formatCellValue(selectedQuiz.isActive)} />
+            </div>
+            <div className="mt-5 space-y-4">
+              {quizQuestions.map((question, index) => (
+                <div key={question.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="font-black text-slate-950">
+                    {index + 1}. {formatCellValue(question.questionText)}
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {quizOptions
+                      .filter((option) => option.questionId === question.id)
+                      .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
+                      .map((option) => (
+                        <label
+                          key={option.id}
+                          className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                        >
+                          <input
+                            type="radio"
+                            name={question.id}
+                            checked={selectedAnswers[question.id] === option.id}
+                            onChange={() =>
+                              setSelectedAnswers((current) => ({
+                                ...current,
+                                [question.id]: option.id,
+                              }))
+                            }
+                          />
+                          {formatCellValue(option.text)}
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              ))}
+              {!quizQuestions.length ? (
+                <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                  لم يضف المعلم أسئلة لهذا الاختبار بعد.
+                </p>
+              ) : null}
             </div>
             <button className="btn-primary mt-5" type="button" onClick={submitQuizAttempt}>
               <CheckCircle2 size={18} />
-              ????? ??????
+              تسجيل محاولة
             </button>
           </section>
         ) : (
-          <EmptyState text="?? ???? ?????? ???? ?????." />
+          <EmptyState text="لا يوجد اختبار لهذا الدرس." />
         )}
       </StudentShell>
     );
@@ -333,18 +494,24 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   if (view === "result") {
     return (
-      <StudentShell title="????? ??????????" subtitle="????? ???????? ??????.">
-        <RecordList records={attempts} empty="?? ???? ????? ???." />
+      <StudentShell title="نتائج الاختبارات" subtitle="درجات ومحاولات الطالب.">
+        <RecordList records={attempts} empty="لا توجد نتائج بعد." />
       </StudentShell>
     );
   }
 
   return (
-    <StudentShell title="??????? ???????" subtitle="??????? ??????? ???? ????? ?????? ??.">
+    <StudentShell title="المناهج المتاحة" subtitle="المناهج والدروس التي فعلها المعلم لك.">
       <section className="surface grid gap-3 p-5 sm:grid-cols-3">
-        <MiniMetric label="????" value={formatGrade(gradeId)} />
-        <MiniMetric label="??????" value={formatCellValue(showTrack ? track : "?? ????")} />
-        <MiniMetric label="????????" value={String(assignedTeacherIds.length)} />
+        <MiniMetric label="الصف" value={formatGrade(gradeId)} />
+        <MiniMetric label="المسار" value={formatCellValue(showTrack ? track : "لا يوجد")} />
+        <MiniMetric label="المعلمون" value={String(assignedTeacherIds.length)} />
+      </section>
+
+      <section className="surface grid gap-3 p-5 sm:grid-cols-3">
+        <MiniMetric label="الدروس المكتملة" value={`${completedLessons}/${subjectLessons.length}`} />
+        <MiniMetric label="آخر درس" value={formatCellValue(selectedLesson?.title ?? "لا يوجد")} />
+        <MiniMetric label="نسبة الإنجاز" value={`${overallProgress}%`} />
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(260px,360px)_1fr]">
@@ -363,7 +530,7 @@ export function StudentLearningPage({ view }: { view: string }) {
                   <p className="text-xs font-bold text-learning-blue">{formatGrade(gradeId)}</p>
                   <h2 className="mt-2 text-xl font-black text-slate-950">{subject}</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {subjectLessons.length} ??? ???? ?? ??????.
+                    {subjectLessons.length} درس متاح من معلميك.
                   </p>
                 </div>
                 <BookOpen className="text-learning-blue" size={26} />
@@ -371,14 +538,14 @@ export function StudentLearningPage({ view }: { view: string }) {
             </button>
           ))}
           {!availableSubjects.length ? (
-            <EmptyState text="?? ???? ????? ????? ?? ???. ???? ?? ?????? ??? ??????? ?????." />
+            <EmptyState text="لا توجد مناهج مفعلة لك بعد. اطلب من المعلم ربط المنهاج بسجلك." />
           ) : null}
         </section>
 
         {selectedSubject ? (
           <section className="space-y-3">
             <div className="surface p-5">
-              <p className="text-xs font-bold text-learning-blue">?????? ??????</p>
+              <p className="text-xs font-bold text-learning-blue">الدروس والعرض</p>
               <h2 className="mt-2 text-2xl font-black text-slate-950">
                 {selectedSubject}
               </h2>
@@ -390,39 +557,57 @@ export function StudentLearningPage({ view }: { view: string }) {
                   key={lesson.id}
                   className={`surface p-5 text-right ${
                     lesson.id === selectedLesson?.id ? "ring-2 ring-learning-blue" : ""
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                   type="button"
-                  onClick={() => setActiveLessonId(lesson.id)}
+                  disabled={!canOpenLesson(lesson)}
+                  onClick={() => {
+                    if (canOpenLesson(lesson)) {
+                      setActiveLessonId(lesson.id);
+                    }
+                  }}
                 >
                   <p className="text-xs font-bold text-slate-400">
-                    ????? {formatCellValue(lesson.order)}
+                    الدرس {formatCellValue(lesson.order)}
                   </p>
                   <h3 className="mt-1 text-lg font-black text-slate-950">
                     {formatCellValue(lesson.title)}
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    {formatCellValue(lesson.objectives ?? "????? ???? ????.")}
+                    {formatCellValue(lesson.objectives ?? "الدرس متاح الآن.")}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500">
+                      {lesson.learningMode === "linear" ? "خطي" : "حر"}
+                    </span>
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-learning-blue">
+                      {lessonProgress(lesson)}%
+                    </span>
+                    {!canOpenLesson(lesson) ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">
+                        يحتاج إكمال الدرس السابق
+                      </span>
+                    ) : null}
+                  </div>
                 </button>
               ))}
             </div>
 
             {!subjectLessons.length ? (
-              <EmptyState text="?? ???? ???? ?????? ???? ??????? ???." />
+              <EmptyState text="لا توجد دروس منشورة لهذا المنهاج بعد." />
             ) : null}
 
             {selectedLesson ? (
               <section className="space-y-3">
                 <div className="surface p-5">
-                  <p className="text-xs font-bold text-learning-blue">??? ?????</p>
+                  <p className="text-xs font-bold text-learning-blue">عرض الدرس</p>
                   <h2 className="mt-2 text-xl font-black text-slate-950">
                     {formatCellValue(selectedLesson.title)}
                   </h2>
                 </div>
-                <LessonBlocks blocks={lessonBlocks} />
+                <LessonBlocks blocks={publishedLessonBlocks} />
                 {quizzes.length ? (
                   <Link className="btn-primary" to={`/student/quiz?lessonId=${selectedLessonId}&quizId=${quizzes[0].id}`}>
-                    ??? ????????
+                    فتح الاختبار
                   </Link>
                 ) : null}
               </section>
@@ -436,7 +621,7 @@ export function StudentLearningPage({ view }: { view: string }) {
 
 function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
   if (!blocks.length) {
-    return <EmptyState text="?? ???? ????? ???? ????? ???." />;
+    return <EmptyState text="لا توجد عناصر لهذا الدرس بعد." />;
   }
 
   return (
@@ -452,12 +637,19 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
               <img
                 className="mt-3 max-h-96 w-full rounded-lg border border-slate-200 object-contain"
                 src={String(block.url)}
-                alt={String(block.title ?? "???? ?????")}
+                alt={String(block.title ?? "صورة الدرس")}
               />
             ) : null}
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-              {formatCellValue(block.content)}
-            </p>
+            {block.type === "text" ? (
+              <div
+                className="prose prose-sm mt-2 max-w-none text-slate-600"
+                dangerouslySetInnerHTML={{ __html: String(block.content ?? "") }}
+              />
+            ) : (
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                {formatCellValue(block.content)}
+              </p>
+            )}
             {block.url && block.type !== "image" ? (
               <a
                 className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue"
@@ -466,7 +658,7 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
                 rel="noreferrer"
               >
                 <LinkIcon size={16} />
-                ??? ??????
+                فتح الرابط
               </a>
             ) : null}
           </article>

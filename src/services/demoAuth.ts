@@ -28,18 +28,6 @@ function accountToUser(account: DemoStoredAccount): AppUser {
   };
 }
 
-function builtInAccounts(): DemoStoredAccount[] {
-  return demoAccounts.map((account) => ({
-    uid: `demo-${account.username}`,
-    username: account.username,
-    password: account.password,
-    displayName: account.displayName,
-    role: account.role,
-    contactEmail: account.contactEmail,
-    disabled: false,
-  }));
-}
-
 function readExtraAccounts(): DemoStoredAccount[] {
   try {
     const raw = localStorage.getItem(ACCOUNTS_KEY);
@@ -137,4 +125,15 @@ export function registerDemoAccount(input: {
 
   writeExtraAccounts([...readExtraAccounts(), account]);
   return accountToUser(account);
+}
+function builtInAccounts(): DemoStoredAccount[] {
+  return demoAccounts.map((account) => ({
+    uid: `demo-${account.username}`,
+    username: account.username,
+    password: account.password,
+    displayName: account.displayName,
+    role: account.role,
+    contactEmail: account.contactEmail,
+    disabled: false,
+  }));
 }
