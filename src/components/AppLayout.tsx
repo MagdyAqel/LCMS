@@ -17,6 +17,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   const visibleGroups = appUser ? roleNavigation[appUser.role] : [];
+  const accountIdentifier =
+    appUser?.username ||
+    (appUser?.email?.endsWith("@lcms.test")
+      ? appUser.email.split("@")[0]
+      : appUser?.email ?? "");
 
   async function handleLogout() {
     await logout();
@@ -54,7 +59,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   {appUser.displayName}
                 </p>
                 <p className="text-xs font-semibold text-slate-500">
-                  @{appUser.username || appUser.email}
+                  <span dir="ltr">@{accountIdentifier}</span>
                 </p>
               </div>
             ) : null}

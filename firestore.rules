@@ -195,7 +195,11 @@ service cloud.firestore {
         || isOwner(resource.data.studentId)
         || (
           isStudent()
-          && resource.data.username == currentUser().data.username
+          && (
+            resource.data.username == currentUser().data.username
+            || resource.data.authEmail == request.auth.token.email
+            || resource.data.email == request.auth.token.email
+          )
         )
         || isTeacherOwner();
       allow create: if isAdmin() || createsTeacherOwned();

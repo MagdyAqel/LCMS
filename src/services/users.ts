@@ -28,20 +28,32 @@ export function userDocumentRef(uid: string) {
   return doc(db, "users", uid);
 }
 
+function usernameFromInternalEmail(email: string | null | undefined) {
+  return email?.endsWith("@lcms.test") ? email.split("@")[0] : "";
+}
+
 export async function ensureUserDocument(user: User) {
   const ref = userDocumentRef(user.uid);
   const snapshot = await getDoc(ref);
+  const internalUsername = usernameFromInternalEmail(user.email);
 
   if (snapshot.exists()) {
+    const data = snapshot.data();
+
+    if (!data.username && internalUsername) {
+      await updateDoc(ref, {
+        username: internalUsername,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
     return;
   }
 
   await setDoc(ref, {
     uid: user.uid,
     email: user.email ?? "",
-    username: user.email?.endsWith("@lcms.test")
-      ? user.email.split("@")[0]
-      : "",
+    username: internalUsername,
     contactEmail: "",
     displayName: user.displayName ?? user.email?.split("@")[0] ?? "Student",
     photoURL: user.photoURL ?? null,

@@ -109,6 +109,18 @@ function getRecordStringArray(record: AppRecord | null, key: string) {
     : [];
 }
 
+function usernameFromAppUser(appUser: { username?: string; email?: string } | null) {
+  if (!appUser) {
+    return "";
+  }
+
+  if (appUser.username) {
+    return appUser.username;
+  }
+
+  return appUser.email?.endsWith("@lcms.test") ? appUser.email.split("@")[0] : "";
+}
+
 export function StudentLearningPage({ view }: { view: string }) {
   const { appUser } = useAuth();
   const lessonId = useQueryParam("lessonId");
@@ -124,6 +136,7 @@ export function StudentLearningPage({ view }: { view: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [trackedBlockIds, setTrackedBlockIds] = useState<string[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const accountUsername = usernameFromAppUser(appUser);
 
   const gradeId = String(studentProfile?.gradeId ?? "");
   const track = String(studentProfile?.track ?? "");
@@ -233,10 +246,23 @@ export function StudentLearningPage({ view }: { view: string }) {
       ),
     ];
 
-    if (appUser.username) {
+    if (accountUsername) {
       studentProfileQueries.push(
         onSnapshot(
-          query(collection(db, "students"), where("username", "==", appUser.username)),
+          query(collection(db, "students"), where("username", "==", accountUsername)),
+          (snapshot) => {
+            const profile = snapshot.docs[0];
+            applyStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
+          },
+          () => undefined,
+        ),
+      );
+    }
+
+    if (appUser.email) {
+      studentProfileQueries.push(
+        onSnapshot(
+          query(collection(db, "students"), where("authEmail", "==", appUser.email)),
           (snapshot) => {
             const profile = snapshot.docs[0];
             applyStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
@@ -265,7 +291,7 @@ export function StudentLearningPage({ view }: { view: string }) {
     ];
 
     return () => unsubs.forEach((unsubscribe) => unsubscribe());
-  }, [appUser]);
+  }, [accountUsername, appUser]);
 
   const subjectLessons = useMemo(
     () =>
