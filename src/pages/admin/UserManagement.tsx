@@ -1,6 +1,9 @@
-import { Ban, CheckCircle2, RefreshCw, ShieldCheck, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Ban, CheckCircle2, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { RoleBadge } from "../../components/RoleBadge";
+import { useAuth } from "../../context/AuthContext";
+import { createManagedAccount } from "../../services/accounts";
+import { getDemoUsers, isDemoUser } from "../../services/demoAuth";
 import {
   subscribeToUsers,
   updateUserDisabled,
@@ -17,13 +20,32 @@ const roleLabels: Record<UserRole, string> = {
 };
 
 export function UserManagement() {
+  const { appUser } = useAuth();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [savingUid, setSavingUid] = useState<string | null>(null);
   const [filter, setFilter] = useState<UserRole | "all">("all");
+  const [newUser, setNewUser] = useState({
+    displayName: "",
+    username: "",
+    password: "",
+    contactEmail: "",
+    role: "admin" as UserRole,
+  });
 
   useEffect(() => {
+    if (!appUser) {
+      return;
+    }
+
+    if (isDemoUser(appUser)) {
+      setUsers(getDemoUsers());
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = subscribeToUsers(
       (items) => {
         setUsers(items);
@@ -36,7 +58,7 @@ export function UserManagement() {
     );
 
     return unsubscribe;
-  }, []);
+  }, [appUser]);
 
   const filteredUsers = useMemo(() => {
     if (filter === "all") {
@@ -47,6 +69,11 @@ export function UserManagement() {
   }, [filter, users]);
 
   async function handleRoleChange(uid: string, role: UserRole) {
+    if (isDemoUser(appUser)) {
+      setError("تعديل أدوار الحسابات المحلية غير متاح. أنشئ حسابًا جديدًا بالدور المطلوب.");
+      return;
+    }
+
     setSavingUid(uid);
     setError(null);
 
@@ -60,6 +87,11 @@ export function UserManagement() {
   }
 
   async function handleDisabledChange(uid: string, disabled: boolean) {
+    if (isDemoUser(appUser)) {
+      setError("إيقاف الحسابات المحلية غير متاح من هذه الصفحة.");
+      return;
+    }
+
     setSavingUid(uid);
     setError(null);
 
@@ -67,6 +99,54 @@ export function UserManagement() {
       await updateUserDisabled(uid, disabled);
     } catch {
       setError("تعذر تحديث حالة المستخدم.");
+    } finally {
+      setSavingUid(null);
+    }
+  }
+
+  async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!appUser) {
+      return;
+    }
+
+    setSavingUid("new");
+    setError(null);
+    setNotice(null);
+
+    try {
+      await createManagedAccount({
+        username: newUser.username,
+        password: newUser.password,
+        displayName: newUser.displayName,
+        role: newUser.role,
+        createdBy: appUser,
+        contactEmail: newUser.contactEmail,
+      });
+
+      setNotice(
+        newUser.role === "admin"
+          ? "تمت إضافة المسؤول الجديد بنجاح."
+          : "تمت إضافة المستخدم بنجاح.",
+      );
+      setNewUser({
+        displayName: "",
+        username: "",
+        password: "",
+        contactEmail: "",
+        role: "admin",
+      });
+
+      if (isDemoUser(appUser)) {
+        setUsers(getDemoUsers());
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "تعذر إنشاء المستخدم. راجع اسم المستخدم وكلمة المرور والصلاحيات.",
+      );
     } finally {
       setSavingUid(null);
     }
@@ -117,6 +197,106 @@ export function UserManagement() {
           {error}
         </div>
       ) : null}
+
+      {notice ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          {notice}
+        </div>
+      ) : null}
+
+      <section className="surface p-5">
+        <div className="mb-5">
+          <h2 className="text-lg font-black text-slate-950">إضافة مستخدم</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            لإضافة مسؤول آخر اختر الدور Admin، ثم أدخل اسم المستخدم وكلمة المرور.
+          </p>
+        </div>
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreateUser}>
+          <label className="block space-y-2">
+            <span className="form-label">الاسم الكامل</span>
+            <input
+              className="form-input"
+              value={newUser.displayName}
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  displayName: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">اسم المستخدم</span>
+            <input
+              className="form-input"
+              value={newUser.username}
+              placeholder="admin03"
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  username: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">كلمة المرور</span>
+            <input
+              className="form-input"
+              type="password"
+              value={newUser.password}
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  password: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">الدور</span>
+            <select
+              className="form-input"
+              value={newUser.role}
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  role: event.target.value as UserRole,
+                }))
+              }
+            >
+              {roles.map((role) => (
+                <option key={role} value={role}>
+                  {roleLabels[role]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-2 md:col-span-2">
+            <span className="form-label">البريد للتواصل</span>
+            <input
+              className="form-input"
+              type="email"
+              value={newUser.contactEmail}
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  contactEmail: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <div className="md:col-span-2">
+            <button className="btn-primary" type="submit" disabled={savingUid === "new"}>
+              <Plus size={18} aria-hidden="true" />
+              إضافة المستخدم
+            </button>
+          </div>
+        </form>
+      </section>
 
       <section className="surface overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
