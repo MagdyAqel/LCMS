@@ -13,6 +13,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   collection,
+  doc,
   onSnapshot,
   query,
   where,
@@ -231,6 +232,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [teacherProfile, setTeacherProfile] = useState<AppRecord | null>(null);
 
   useEffect(() => {
     if (!appUser) {
@@ -254,6 +256,37 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
     return unsubscribe;
   }, [appUser, config.collection, config.scope]);
+
+  useEffect(() => {
+    if (!appUser || appUser.role !== "teacher" || config.collection !== "students") {
+      setTeacherProfile(null);
+      return;
+    }
+
+    if (isDemoUser(appUser)) {
+      return subscribeToRecords(
+        "teachers",
+        appUser,
+        { type: "all" },
+        (items) =>
+          setTeacherProfile(
+            items.find((item) => item.id === appUser.uid || item.userId === appUser.uid) ??
+              null,
+          ),
+        () => setTeacherProfile(null),
+      );
+    }
+
+    return onSnapshot(
+      doc(db, "teachers", appUser.uid),
+      (snapshot) => {
+        setTeacherProfile(
+          snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null,
+        );
+      },
+      () => setTeacherProfile(null),
+    );
+  }, [appUser, config.collection]);
 
   useEffect(() => {
     if (!appUser) {
@@ -328,9 +361,66 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     [config.formFields, editing, formValues],
   );
 
+  const teacherStudentSubjects = useMemo(() => {
+    if (config.collection !== "students" || appUser?.role !== "teacher") {
+      return [];
+    }
+
+    const subjects = teacherProfile?.teachingSubjects;
+    return Array.isArray(subjects)
+      ? subjects.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : [];
+  }, [appUser?.role, config.collection, teacherProfile?.teachingSubjects]);
+
+  useEffect(() => {
+    if (
+      editing ||
+      config.collection !== "students" ||
+      appUser?.role !== "teacher" ||
+      !teacherProfile
+    ) {
+      return;
+    }
+
+    const teacherGradeId = String(teacherProfile.gradeId ?? "");
+    const teacherTrack = requiresTrack(teacherGradeId)
+      ? String(teacherProfile.track ?? "")
+      : "";
+    const teacherSubjects = Array.isArray(teacherProfile.teachingSubjects)
+      ? teacherProfile.teachingSubjects
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+      : [];
+
+    setFormValues((current) => ({
+      ...current,
+      gradeId: teacherGradeId,
+      track: teacherTrack,
+      curriculumSubject: teacherSubjects.includes(String(current.curriculumSubject ?? ""))
+        ? current.curriculumSubject
+        : teacherSubjects[0] ?? "",
+    }));
+  }, [appUser?.role, config.collection, editing, teacherProfile]);
+
   function startCreate() {
     setEditing(null);
-    setFormValues(getDefaultFormValues(config.formFields));
+    const defaults = getDefaultFormValues(config.formFields);
+
+    if (config.collection === "students" && appUser?.role === "teacher" && teacherProfile) {
+      const gradeId = String(teacherProfile.gradeId ?? "");
+      const track = requiresTrack(gradeId) ? String(teacherProfile.track ?? "") : "";
+      const teacherSubjects = Array.isArray(teacherProfile.teachingSubjects)
+        ? teacherProfile.teachingSubjects
+            .map((item) => String(item ?? "").trim())
+            .filter(Boolean)
+        : [];
+
+      defaults.gradeId = gradeId;
+      defaults.track = track;
+      defaults.curriculumSubject = teacherSubjects[0] ?? "";
+    }
+
+    setFormValues(defaults);
     setError(null);
     setNotice(null);
   }
@@ -361,6 +451,25 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     try {
       const payload = normalizeForSave(visibleFormFields, formValues);
       const managedRole = getManagedRole(config.collection);
+
+      if (config.collection === "students" && appUser.role === "teacher" && teacherProfile) {
+        const teacherGradeId = String(teacherProfile.gradeId ?? "");
+        const teacherTrack = requiresTrack(teacherGradeId)
+          ? String(teacherProfile.track ?? "")
+          : "";
+        const teacherSubjects = Array.isArray(teacherProfile.teachingSubjects)
+          ? teacherProfile.teachingSubjects
+              .map((item) => String(item ?? "").trim())
+              .filter(Boolean)
+          : [];
+
+        payload.gradeId = teacherGradeId;
+        payload.track = teacherTrack;
+
+        if (!teacherSubjects.includes(String(payload.curriculumSubject ?? ""))) {
+          payload.curriculumSubject = teacherSubjects[0] ?? "";
+        }
+      }
 
       if (!editing && managedRole) {
         const password = String(formValues.password ?? "");
@@ -810,7 +919,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             {visibleFormFields.map((field) => {
               const value = formValues[field.key];
               const dynamicOptions = getDynamicFieldOptions(field, formValues);
-              const options =
+              const baseOptions =
                 dynamicOptions ??
                 (field.reference && references[field.reference.collection]
                   ? references[field.reference.collection].map((record) => ({
@@ -818,6 +927,15 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                       label: formatCellValue(record[field.reference!.labelKey]),
                     }))
                   : field.options ?? []);
+              const options =
+                config.collection === "students" &&
+                appUser?.role === "teacher" &&
+                field.key === "curriculumSubject" &&
+                teacherStudentSubjects.length
+                  ? baseOptions.filter((option) =>
+                      teacherStudentSubjects.includes(option.value),
+                    )
+                  : baseOptions;
 
               if (field.type === "multiselect") {
                 const selectedValues = Array.isArray(value)
@@ -901,6 +1019,12 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                       className="form-input"
                       value={String(value ?? "")}
                       required={field.required}
+                      disabled={
+                        config.collection === "students" &&
+                        appUser?.role === "teacher" &&
+                        (field.key === "gradeId" || field.key === "track") &&
+                        Boolean(teacherProfile)
+                      }
                       onChange={(event) =>
                         setFormValues((current) => ({
                           ...current,

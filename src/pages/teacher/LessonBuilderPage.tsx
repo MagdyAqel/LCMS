@@ -275,6 +275,14 @@ export function LessonBuilderPage() {
     setLessonId(selectedLesson?.id ?? "");
   }, [selectedLesson?.id]);
 
+  function applyRichTextCommand(command: string) {
+    document.execCommand(command);
+  }
+
+  function applyRichTextValue(command: string, value: string) {
+    document.execCommand(command, false, value);
+  }
+
   function resetLessonForm() {
     setEditingLessonId("");
     setLessonTitle("");
@@ -387,7 +395,17 @@ export function LessonBuilderPage() {
   async function handleSaveBlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!appUser || !selectedLesson || !blockTitle.trim()) {
+    if (!appUser) {
+      return;
+    }
+
+    if (!selectedLesson) {
+      setNotice("أضف درسًا أو اختر درسًا قبل إضافة عناصر المحتوى.");
+      return;
+    }
+
+    if (!blockTitle.trim()) {
+      setNotice("عنوان العنصر مطلوب قبل الحفظ.");
       return;
     }
 
@@ -974,17 +992,71 @@ export function LessonBuilderPage() {
               <span className="form-label">المحتوى أو الوصف</span>
               {blockType === "text" ? (
                 <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <select
+                      className="form-input h-10 w-36 py-1 text-sm"
+                      defaultValue=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          applyRichTextValue("fontName", event.target.value);
+                          event.target.value = "";
+                        }
+                      }}
+                      title="نوع الخط"
+                    >
+                      <option value="">نوع الخط</option>
+                      <option value="Arial">Arial</option>
+                      <option value="Tahoma">Tahoma</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                    </select>
+                    <select
+                      className="form-input h-10 w-32 py-1 text-sm"
+                      defaultValue=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          applyRichTextValue("fontSize", event.target.value);
+                          event.target.value = "";
+                        }
+                      }}
+                      title="حجم الخط"
+                    >
+                      <option value="">حجم الخط</option>
+                      <option value="2">صغير</option>
+                      <option value="3">عادي</option>
+                      <option value="5">كبير</option>
+                      <option value="7">كبير جدًا</option>
+                    </select>
+                    <select
+                      className="form-input h-10 w-32 py-1 text-sm"
+                      defaultValue=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          applyRichTextValue("formatBlock", event.target.value);
+                          event.target.value = "";
+                        }
+                      }}
+                      title="نمط النص"
+                    >
+                      <option value="">نمط النص</option>
+                      <option value="p">فقرة</option>
+                      <option value="h2">عنوان كبير</option>
+                      <option value="h3">عنوان فرعي</option>
+                    </select>
                     {[
                       { command: "bold", label: "B" },
                       { command: "italic", label: "I" },
+                      { command: "underline", label: "U" },
+                      { command: "justifyRight", label: "يمين" },
+                      { command: "justifyCenter", label: "وسط" },
+                      { command: "insertOrderedList", label: "1." },
                       { command: "insertUnorderedList", label: "•" },
                     ].map((item) => (
                       <button
                         key={item.command}
-                        className="btn-secondary size-10 p-0"
+                        className="btn-secondary h-10 min-w-10 px-3"
                         type="button"
-                        onClick={() => document.execCommand(item.command)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => applyRichTextCommand(item.command)}
                         title={item.command}
                       >
                         {item.label}
@@ -995,6 +1067,7 @@ export function LessonBuilderPage() {
                     className="form-input min-h-32"
                     contentEditable
                     suppressContentEditableWarning
+                    onInput={(event) => setBlockContent(event.currentTarget.innerHTML)}
                     onBlur={(event) => setBlockContent(event.currentTarget.innerHTML)}
                     dangerouslySetInnerHTML={{ __html: blockContent }}
                   />
@@ -1011,7 +1084,7 @@ export function LessonBuilderPage() {
             <button
               className="btn-primary md:col-span-2"
               type="submit"
-              disabled={saving || !selectedLesson}
+              disabled={saving}
             >
               {editingBlockId ? <Save size={18} /> : <Plus size={18} />}
               {editingBlockId ? "حفظ تعديل العنصر" : "إضافة عنصر"}

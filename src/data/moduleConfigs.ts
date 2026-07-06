@@ -53,6 +53,7 @@ const studentFormFields: FormField[] = [
   { key: "fullName", label: "الاسم الكامل", type: "text", required: true },
   { key: "username", label: "اسم المستخدم", type: "text", required: true, placeholder: "student01" },
   { key: "password", label: "كلمة المرور الأولية", type: "password", required: true, hiddenOnEdit: true },
+  { key: "confirmPassword", label: "تأكيد كلمة المرور", type: "password", required: true, hiddenOnEdit: true },
   { key: "nationalId", label: "رقم الهوية", type: "text", required: true },
   { key: "gradeId", label: "الصف", type: "select", options: gradeOptions, required: true },
   { key: "track", label: "المسار", type: "select", options: trackOptions },
