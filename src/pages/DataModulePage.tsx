@@ -583,8 +583,14 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       if (config.collection === "students" && appUser.role === "teacher") {
         const existingTeacherIds = editing?.teacherIds ?? editing?.teacherId ?? [];
+        const existingTeacherNames = editing?.teacherNames ?? editing?.teacherName ?? [];
+        const teacherName = String(
+          teacherProfile?.fullName ?? teacherProfile?.displayName ?? appUser.displayName ?? "",
+        );
         payload.teacherId = String(editing?.teacherId ?? payload.teacherId ?? appUser.uid);
         payload.teacherIds = uniqueStrings([existingTeacherIds, payload.teacherId, appUser.uid]);
+        payload.teacherName = String(editing?.teacherName ?? teacherName);
+        payload.teacherNames = uniqueStrings([existingTeacherNames, payload.teacherName]);
       }
 
       if (config.collection === "teachers" && editing && !payload.password) {

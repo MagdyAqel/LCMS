@@ -102,6 +102,35 @@ function useLessonsForTeachers(
   return records;
 }
 
+function useTeacherProfiles(teacherIds: string[]) {
+  const [records, setRecords] = useState<AppRecord[]>([]);
+
+  useEffect(() => {
+    if (!teacherIds.length) {
+      setRecords([]);
+      return;
+    }
+
+    const teachersById = new Map<string, AppRecord>();
+    const unsubs = teacherIds.map((teacherId) =>
+      onSnapshot(
+        doc(db, "teachers", teacherId),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            teachersById.set(snapshot.id, { id: snapshot.id, ...snapshot.data() });
+          }
+          setRecords(Array.from(teachersById.values()));
+        },
+        () => undefined,
+      ),
+    );
+
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }, [teacherIds]);
+
+  return records;
+}
+
 function getRecordStringArray(record: AppRecord | null, key: string) {
   const value = record?.[key];
   return Array.isArray(value)
@@ -157,6 +186,27 @@ export function StudentLearningPage({ view }: { view: string }) {
       new Set(subjects.map((subject) => String(subject ?? "").trim()).filter(Boolean)),
     );
   }, [studentProfile]);
+  const teacherProfiles = useTeacherProfiles(assignedTeacherIds);
+  const teacherNames = useMemo(
+    () => {
+      const namesFromProfile = [
+        ...getRecordStringArray(studentProfile, "teacherNames"),
+        studentProfile?.teacherName,
+      ]
+        .map((name) => String(name ?? "").trim())
+        .filter(Boolean);
+
+      if (namesFromProfile.length) {
+        return Array.from(new Set(namesFromProfile));
+      }
+
+      return assignedTeacherIds.map((teacherId) => {
+        const teacher = teacherProfiles.find((item) => item.id === teacherId);
+        return String(teacher?.fullName ?? teacher?.displayName ?? teacherId);
+      });
+    },
+    [assignedTeacherIds, studentProfile, teacherProfiles],
+  );
   const lessons = useLessonsForTeachers(assignedTeacherIds, gradeId, track, showTrack);
   const publishedTeacherLessonSubjects = useMemo(
     () =>
@@ -211,7 +261,21 @@ export function StudentLearningPage({ view }: { view: string }) {
       }
 
       setStudentProfile((current) => {
-        if (!current || profile.id === appUser.uid || current.id !== appUser.uid) {
+        const profileHasLearningLink =
+          Boolean(profile.gradeId) ||
+          Boolean(profile.teacherId) ||
+          getRecordStringArray(profile, "teacherIds").length > 0;
+        const currentHasLearningLink =
+          Boolean(current?.gradeId) ||
+          Boolean(current?.teacherId) ||
+          getRecordStringArray(current, "teacherIds").length > 0;
+
+        if (
+          !current ||
+          (profileHasLearningLink && !currentHasLearningLink) ||
+          profile.id === appUser.uid ||
+          current.id !== appUser.uid
+        ) {
           return profile;
         }
 
@@ -614,10 +678,18 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   return (
     <StudentShell title="المناهج المتاحة" subtitle="المناهج والدروس التي فعلها المعلم لك.">
+      {!studentProfile ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          لم يتم العثور على سجل الطالب المرتبط بهذا الحساب بعد. تأكد أن اسم المستخدم في سجل الطالب هو {accountUsername || appUser?.email}.
+        </div>
+      ) : null}
       <section className="surface grid gap-3 p-5 sm:grid-cols-3">
         <MiniMetric label="الصف" value={formatGrade(gradeId)} />
         <MiniMetric label="المسار" value={formatCellValue(showTrack ? track : "لا يوجد")} />
-        <MiniMetric label="المعلمون" value={String(assignedTeacherIds.length)} />
+        <MiniMetric
+          label="المعلم"
+          value={teacherNames.length ? teacherNames.join("، ") : "لا يوجد"}
+        />
       </section>
 
       <section className="surface grid gap-3 p-5 sm:grid-cols-3">

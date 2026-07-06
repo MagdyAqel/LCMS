@@ -155,6 +155,14 @@ service cloud.firestore {
           && request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(["displayName", "photoURL", "updatedAt"])
+        )
+        || (
+          signedIn()
+          && request.auth.uid == userId
+          && (!("username" in resource.data) || resource.data.username == "")
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["username", "updatedAt"])
+          && request.resource.data.username is string
         );
 
       allow delete: if isAdmin();
