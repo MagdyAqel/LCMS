@@ -191,15 +191,63 @@ export function StudentLearningPage({ view }: { view: string }) {
       return;
     }
 
-    const unsubs: Unsubscribe[] = [
+    setStudentProfile(null);
+    const applyStudentProfile = (profile: AppRecord | null) => {
+      if (!profile) {
+        return;
+      }
+
+      setStudentProfile((current) => {
+        if (!current || profile.id === appUser.uid || current.id !== appUser.uid) {
+          return profile;
+        }
+
+        return current;
+      });
+    };
+    const studentProfileQueries: Unsubscribe[] = [
+      onSnapshot(
+        doc(db, "students", appUser.uid),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            applyStudentProfile({ id: snapshot.id, ...snapshot.data() });
+          }
+        },
+        () => undefined,
+      ),
       onSnapshot(
         query(collection(db, "students"), where("studentId", "==", appUser.uid)),
         (snapshot) => {
           const profile = snapshot.docs[0];
-          setStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
+          applyStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
         },
         () => undefined,
       ),
+      onSnapshot(
+        query(collection(db, "students"), where("userId", "==", appUser.uid)),
+        (snapshot) => {
+          const profile = snapshot.docs[0];
+          applyStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
+        },
+        () => undefined,
+      ),
+    ];
+
+    if (appUser.username) {
+      studentProfileQueries.push(
+        onSnapshot(
+          query(collection(db, "students"), where("username", "==", appUser.username)),
+          (snapshot) => {
+            const profile = snapshot.docs[0];
+            applyStudentProfile(profile ? { id: profile.id, ...profile.data() } : null);
+          },
+          () => undefined,
+        ),
+      );
+    }
+
+    const unsubs: Unsubscribe[] = [
+      ...studentProfileQueries,
       onSnapshot(
         query(collection(db, "notifications"), where("targetType", "==", "allStudents")),
         (snapshot) => {

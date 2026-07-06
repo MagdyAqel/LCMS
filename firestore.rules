@@ -101,6 +101,8 @@ service cloud.firestore {
       let lesson = get(/databases/$(database)/documents/lessons/$(lessonId)).data;
       return isStudent()
         && (
+          lesson.status == "published"
+          ||
           studentCanReadPublishedTeacherGrade(
             lesson.teacherId,
             lesson.gradeId,
@@ -190,6 +192,11 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read: if isAdmin()
         || isOwner(resource.data.userId)
+        || isOwner(resource.data.studentId)
+        || (
+          isStudent()
+          && resource.data.username == currentUser().data.username
+        )
         || isTeacherOwner();
       allow create: if isAdmin() || createsTeacherOwned();
       allow update: if isAdmin() || isTeacherOwner();
@@ -240,6 +247,7 @@ service cloud.firestore {
     match /lessons/{lessonId} {
       allow read: if isAdmin()
         || isTeacherOwner()
+        || (isStudent() && resource.data.status == "published")
         || studentCanReadPublishedTeacherGrade(
           resource.data.teacherId,
           resource.data.gradeId,

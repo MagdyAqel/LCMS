@@ -48,6 +48,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {appUser ? (
+              <div className="hidden text-left sm:block">
+                <p className="text-sm font-black text-slate-950">
+                  {appUser.displayName}
+                </p>
+                <p className="text-xs font-semibold text-slate-500">
+                  @{appUser.username || appUser.email}
+                </p>
+              </div>
+            ) : null}
             {appUser ? <RoleBadge role={appUser.role} /> : null}
             <button
               className="btn-secondary size-10 p-0"
