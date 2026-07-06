@@ -31,6 +31,7 @@ export function UserManagement() {
     displayName: "",
     username: "",
     password: "",
+    confirmPassword: "",
     contactEmail: "",
     role: "admin" as UserRole,
   });
@@ -116,6 +117,10 @@ export function UserManagement() {
     setNotice(null);
 
     try {
+      if (newUser.password !== newUser.confirmPassword) {
+        throw new Error("كلمة المرور وتأكيدها غير متطابقين.");
+      }
+
       await createManagedAccount({
         username: newUser.username,
         password: newUser.password,
@@ -134,6 +139,7 @@ export function UserManagement() {
         displayName: "",
         username: "",
         password: "",
+        confirmPassword: "",
         contactEmail: "",
         role: "admin",
       });
@@ -251,6 +257,21 @@ export function UserManagement() {
                 setNewUser((current) => ({
                   ...current,
                   password: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">تأكيد كلمة المرور</span>
+            <input
+              className="form-input"
+              type="password"
+              value={newUser.confirmPassword}
+              onChange={(event) =>
+                setNewUser((current) => ({
+                  ...current,
+                  confirmPassword: event.target.value,
                 }))
               }
               required

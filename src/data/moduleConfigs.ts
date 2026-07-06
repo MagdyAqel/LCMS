@@ -139,6 +139,7 @@ const allModuleConfigs: ModuleConfig[] = [
     tableFields: [
       "fullName",
       "username",
+      "password",
       "nationalId",
       "gradeId",
       "track",
@@ -149,6 +150,7 @@ const allModuleConfigs: ModuleConfig[] = [
     searchableFields: [
       "fullName",
       "username",
+      "password",
       "nationalId",
       "gradeId",
       "track",
@@ -159,7 +161,8 @@ const allModuleConfigs: ModuleConfig[] = [
     formFields: [
       { key: "fullName", label: "الاسم الكامل", type: "text", required: true },
       { key: "username", label: "اسم المستخدم", type: "text", required: true, placeholder: "teacher01" },
-      { key: "password", label: "كلمة المرور الأولية", type: "password", required: true, hiddenOnEdit: true },
+      { key: "password", label: "كلمة المرور", type: "text" },
+      { key: "confirmPassword", label: "تأكيد كلمة المرور", type: "password", required: true, hiddenOnEdit: true },
       { key: "nationalId", label: "رقم الهوية", type: "text", required: true },
       { key: "birthDate", label: "تاريخ الميلاد", type: "date" },
       { key: "gradeId", label: "الصف", type: "select", options: gradeOptions, required: true },

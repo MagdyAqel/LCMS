@@ -360,6 +360,25 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
     try {
       const payload = normalizeForSave(visibleFormFields, formValues);
+      const managedRole = getManagedRole(config.collection);
+
+      if (!editing && managedRole) {
+        const password = String(formValues.password ?? "");
+        const confirmPassword = String(formValues.confirmPassword ?? "");
+
+        if (!password) {
+          throw new Error("كلمة المرور مطلوبة عند إنشاء الحساب.");
+        }
+
+        if (
+          visibleFormFields.some((field) => field.key === "confirmPassword") &&
+          password !== confirmPassword
+        ) {
+          throw new Error("كلمة المرور وتأكيدها غير متطابقين.");
+        }
+      }
+
+      delete payload.confirmPassword;
 
       if (!requiresTrack(payload.gradeId)) {
         payload.track = "";
@@ -425,12 +444,14 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         payload.teacherIds = uniqueStrings([existingTeacherIds, payload.teacherId, appUser.uid]);
       }
 
+      if (config.collection === "teachers" && editing && !payload.password) {
+        delete payload.password;
+      }
+
       if (editing) {
         await updateRecord(config.collection, editing.id, payload, appUser);
         setNotice("تم تحديث السجل بنجاح.");
       } else {
-        const managedRole = getManagedRole(config.collection);
-
         if (managedRole) {
           const password = String(formValues.password ?? "");
           const displayName = String(payload.fullName ?? payload.name ?? "");
@@ -445,7 +466,9 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             disabled: payload.status === "inactive",
           });
 
-          delete payload.password;
+          if (config.collection !== "teachers") {
+            delete payload.password;
+          }
           payload.username = account.username;
           payload.userId = account.uid;
           payload.authEmail = account.email;
@@ -576,6 +599,8 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
     try {
       for (const row of importRows) {
         const payload = normalizeForSave(config.formFields, row);
+        delete payload.confirmPassword;
+
         if (typeof payload.studentIds === "string") {
           payload.studentIds = payload.studentIds
             .split(",")
@@ -604,7 +629,9 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
             disabled: payload.status === "inactive",
           });
 
-          delete payload.password;
+          if (config.collection !== "teachers") {
+            delete payload.password;
+          }
           payload.username = account.username;
           payload.userId = account.uid;
           payload.authEmail = account.email;

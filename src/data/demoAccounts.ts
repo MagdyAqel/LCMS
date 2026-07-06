@@ -32,19 +32,7 @@ export const demoAdminAccounts: DemoAccount[] = [
   },
 ];
 
-export const demoTeacherAccounts: DemoAccount[] = Array.from(
-  { length: 5 },
-  (_, index) => {
-    const number = String(index + 1).padStart(2, "0");
-    return {
-      role: "teacher",
-      username: `teacher${number}`,
-      password: `Teacher@2026!${number}`,
-      displayName: `معلم تجريبي ${number}`,
-      contactEmail: `teacher${number}@example.com`,
-    };
-  },
-);
+export const demoTeacherAccounts: DemoAccount[] = [];
 
 export const demoStudentAccounts: DemoAccount[] = Array.from(
   { length: 10 },
