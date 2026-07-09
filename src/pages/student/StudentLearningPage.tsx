@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   collection,
   doc,
@@ -240,6 +240,22 @@ export function StudentLearningPage({ view }: { view: string }) {
     },
     [assignedTeacherIds, studentProfile, teacherProfiles],
   );
+  const teacherOptions = useMemo(
+    () =>
+      assignedTeacherIds.map((teacherId, index) => {
+        const teacher = teacherProfiles.find((item) => item.id === teacherId);
+        return {
+          id: teacherId,
+          name: String(
+            teacher?.fullName ??
+              teacher?.displayName ??
+              teacherNames[index] ??
+              teacherId,
+          ),
+        };
+      }),
+    [assignedTeacherIds, teacherNames, teacherProfiles],
+  );
   const lessons = useLessonsForTeachers(
     assignedTeacherIds,
     gradeId,
@@ -300,6 +316,17 @@ export function StudentLearningPage({ view }: { view: string }) {
       setActiveSubject(availableSubjects[0]);
     }
   }, [availableSubjects, selectedSubject]);
+
+  useEffect(() => {
+    if (!teacherOptions.length) {
+      setReceiverId("");
+      return;
+    }
+
+    if (!teacherOptions.some((teacher) => teacher.id === receiverId)) {
+      setReceiverId(teacherOptions[0].id);
+    }
+  }, [receiverId, teacherOptions]);
 
   useEffect(() => {
     if (!appUser) {
@@ -682,11 +709,18 @@ export function StudentLearningPage({ view }: { view: string }) {
       return;
     }
 
+    const messageReceiverId = receiverId || teacherOptions[0]?.id || "";
+
+    if (!messageReceiverId) {
+      setNotice("لا يوجد معلم مرتبط لإرسال الرسالة.");
+      return;
+    }
+
     await createRecord(
       "messages",
       {
         senderId: appUser.uid,
-        receiverId,
+        receiverId: messageReceiverId,
         subject: messageSubject,
         message,
         status: "new",
@@ -697,7 +731,6 @@ export function StudentLearningPage({ view }: { view: string }) {
 
     setMessageSubject("");
     setMessage("");
-    setReceiverId("");
     setNotice("تم إرسال الرسالة.");
   }
 
@@ -764,8 +797,27 @@ export function StudentLearningPage({ view }: { view: string }) {
         {notice ? <Notice text={notice} /> : null}
         <form className="surface grid gap-4 p-5 md:grid-cols-2" onSubmit={handleSendMessage}>
           <label className="block space-y-2">
-            <span className="form-label">معرّف المعلم المستلم</span>
-            <input className="form-input" value={receiverId} onChange={(e) => setReceiverId(e.target.value)} required />
+            <span className="form-label">المعلم المستلم</span>
+            {teacherOptions.length > 1 ? (
+              <select
+                className="form-input"
+                value={receiverId}
+                onChange={(event) => setReceiverId(event.target.value)}
+                required
+              >
+                {teacherOptions.map((teacher) => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="form-input"
+                value={teacherOptions[0]?.name ?? "لا يوجد معلم مرتبط"}
+                readOnly
+              />
+            )}
           </label>
           <label className="block space-y-2">
             <span className="form-label">الموضوع</span>
@@ -980,19 +1032,6 @@ export function StudentLearningPage({ view }: { view: string }) {
                   </h2>
                 </div>
                 <LessonBlocks blocks={publishedLessonBlocks} />
-                {quizzes.length ? (
-                  <div className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-learning-blue">الاختبار</p>
-                      <h3 className="mt-1 text-lg font-black text-slate-950">
-                        {formatCellValue(quizzes[0].title ?? "اختبار الدرس")}
-                      </h3>
-                    </div>
-                    <Link className="btn-primary" to={`/student/quiz?lessonId=${selectedLessonId}&quizId=${quizzes[0].id}`}>
-                      فتح الاختبار
-                    </Link>
-                  </div>
-                ) : null}
               </section>
             ) : null}
           </section>

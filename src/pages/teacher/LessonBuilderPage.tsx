@@ -61,7 +61,7 @@ function safeFileName(name: string) {
   return name.replace(/[^\w.-]+/g, "-").slice(0, 90);
 }
 
-export function LessonBuilderPage() {
+export function LessonBuilderPage({ mode = "lesson" }: { mode?: "lesson" | "quiz" }) {
   const { appUser } = useAuth();
   const [teacherProfile, setTeacherProfile] = useState<AppRecord | null>(null);
   const [lessons, setLessons] = useState<AppRecord[]>([]);
@@ -97,6 +97,7 @@ export function LessonBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const teacherGradeId = String(teacherProfile?.gradeId ?? "");
+  const quizMode = mode === "quiz";
   const teacherTrack = String(teacherProfile?.track ?? "");
   const teacherSubjects = useMemo(
     () => {
@@ -873,7 +874,7 @@ export function LessonBuilderPage() {
         </section>
 
         <section className="space-y-4">
-          {selectedLesson ? (
+          {!quizMode && selectedLesson ? (
             <section className="surface p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -907,6 +908,8 @@ export function LessonBuilderPage() {
             </section>
           ) : null}
 
+          {!quizMode ? (
+          <>
           <form className="surface grid gap-4 p-5 md:grid-cols-2" onSubmit={handleSaveBlock}>
             <div className="md:col-span-2 flex items-start justify-between gap-3">
               <div>
@@ -1183,8 +1186,10 @@ export function LessonBuilderPage() {
               </article>
             ))}
           </div>
+          </>
+          ) : null}
 
-          {selectedLesson ? (
+          {quizMode && selectedLesson ? (
             <form className="surface grid gap-4 p-5 md:grid-cols-2" onSubmit={handleSaveQuestion}>
               <div className="md:col-span-2">
                 <div className="flex items-center gap-2">

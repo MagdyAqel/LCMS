@@ -39,8 +39,12 @@ function TeacherModule({ module }: { module: (typeof teacherModules)[number] }) 
     return <ReportsPage role="teacher" />;
   }
 
+  if (module.path === "/teacher/quizzes") {
+    return <LessonBuilderPage mode="quiz" />;
+  }
+
   if (module.path === "/teacher/lesson-blocks") {
-    return <LessonBuilderPage />;
+    return <LessonBuilderPage mode="lesson" />;
   }
 
   return config ? <DataModulePage config={config} /> : <SpecModulePage module={module} />;
