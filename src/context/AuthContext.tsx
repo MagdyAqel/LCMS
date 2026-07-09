@@ -25,7 +25,6 @@ import {
 import type { AppUser } from "../types";
 import { serverTimestamp, setDoc } from "firebase/firestore";
 import { identifierToAuthEmail } from "../utils/username";
-import { getDemoSession, signInDemo, signOutDemo } from "../services/demoAuth";
 
 type AuthContextValue = {
   firebaseUser: User | null;
@@ -76,25 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let userSubscription: (() => void) | undefined;
-    const demoSession = getDemoSession();
-
-    if (demoSession) {
-      setFirebaseUser(null);
-      setAppUser(demoSession);
-      setLoading(false);
-    }
 
     const authSubscription = onAuthStateChanged(auth, async (user) => {
-      const currentDemoSession = getDemoSession();
-
-      if (currentDemoSession) {
-        userSubscription?.();
-        setFirebaseUser(null);
-        setAppUser(currentDemoSession);
-        setLoading(false);
-        return;
-      }
-
       userSubscription?.();
       setFirebaseUser(user);
       setAppUser(null);
@@ -135,15 +117,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const demoUser = signInDemo(identifier, password);
-
-      if (demoUser) {
-        setFirebaseUser(null);
-        setAppUser(demoUser);
-        setLoading(false);
-        return;
-      }
-
       await signInWithEmailAndPassword(
         auth,
         identifierToAuthEmail(identifier),
@@ -202,7 +175,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    signOutDemo();
     setAppUser(null);
     setFirebaseUser(null);
     await signOut(auth);

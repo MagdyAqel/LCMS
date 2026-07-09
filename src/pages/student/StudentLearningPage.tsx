@@ -25,7 +25,10 @@ import {
 import { getSubjectsForGrade, gradeOptions, requiresTrack } from "../../data/curriculumCatalog";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../lib/firebase";
-import { createRecord, type AppRecord } from "../../services/records";
+import {
+  createRecord,
+  type AppRecord,
+} from "../../services/records";
 import { formatCellValue } from "../../utils/format";
 
 function useQueryParam(name: string) {
@@ -76,21 +79,25 @@ function useLessonsForTeachers(
 
     const lessonsById = new Map<string, AppRecord>();
     const unsubs = teacherIds.map((teacherId) => {
-      const constraints = [
-        where("teacherId", "==", teacherId),
-        where("gradeId", "==", gradeId),
-        where("status", "==", "published"),
-      ];
-
-      if (showTrack) {
-        constraints.push(where("track", "==", track));
-      }
-
       return onSnapshot(
-        query(collection(db, "lessons"), ...constraints),
+        query(collection(db, "lessons"), where("teacherId", "==", teacherId)),
         (snapshot) => {
+          for (const key of Array.from(lessonsById.keys())) {
+            if (key.startsWith(`${teacherId}:`)) {
+              lessonsById.delete(key);
+            }
+          }
+
           for (const item of snapshot.docs) {
-            lessonsById.set(item.id, { id: item.id, ...item.data() });
+            const lesson: AppRecord = { id: item.id, ...item.data() };
+            const matchesStudent =
+              String(lesson.gradeId ?? "") === gradeId &&
+              String(lesson.status ?? "draft") === "published" &&
+              (!showTrack || String(lesson.track ?? "") === track);
+
+            if (matchesStudent) {
+              lessonsById.set(`${teacherId}:${item.id}`, lesson);
+            }
           }
           setRecords(Array.from(lessonsById.values()));
         },
@@ -152,6 +159,30 @@ function usernameFromAppUser(appUser: { username?: string; email?: string } | nu
   return appUser.email?.endsWith("@lcms.test") ? appUser.email.split("@")[0] : "";
 }
 
+function youtubeEmbedUrl(url: unknown) {
+  const raw = String(url ?? "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./, "");
+    const videoId =
+      host === "youtu.be"
+        ? parsed.pathname.slice(1)
+        : parsed.searchParams.get("v") ??
+          (parsed.pathname.startsWith("/embed/")
+            ? parsed.pathname.replace("/embed/", "")
+            : "");
+
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function StudentLearningPage({ view }: { view: string }) {
   const { appUser } = useAuth();
   const lessonId = useQueryParam("lessonId");
@@ -209,7 +240,12 @@ export function StudentLearningPage({ view }: { view: string }) {
     },
     [assignedTeacherIds, studentProfile, teacherProfiles],
   );
-  const lessons = useLessonsForTeachers(assignedTeacherIds, gradeId, track, showTrack);
+  const lessons = useLessonsForTeachers(
+    assignedTeacherIds,
+    gradeId,
+    track,
+    showTrack,
+  );
   const publishedTeacherLessonSubjects = useMemo(
     () =>
       Array.from(
@@ -238,7 +274,21 @@ export function StudentLearningPage({ view }: { view: string }) {
     );
   }, [assignedSubjects, gradeId, publishedTeacherLessonSubjects, showTrack, track]);
   const selectedSubject = activeSubject || availableSubjects[0] || "";
-  const attempts = useCollectionByField("quizAttempts", "studentId", appUser?.uid);
+  const lessonsBySubject = useMemo(
+    () =>
+      availableSubjects.reduce<Record<string, AppRecord[]>>((groups, subject) => {
+        groups[subject] = lessons
+          .filter((lesson) => String(lesson.subject ?? "") === subject)
+          .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+        return groups;
+      }, {}),
+    [availableSubjects, lessons],
+  );
+  const attempts = useCollectionByField(
+    "quizAttempts",
+    "studentId",
+    appUser?.uid,
+  );
 
   useEffect(() => {
     if (!availableSubjects.length) {
@@ -257,6 +307,12 @@ export function StudentLearningPage({ view }: { view: string }) {
     }
 
     setStudentProfile(null);
+    const matchesCurrentStudent = (profile: AppRecord) =>
+      profile.id === appUser.uid ||
+      profile.studentId === appUser.uid ||
+      profile.userId === appUser.uid ||
+      profile.username === accountUsername ||
+      profile.authEmail === appUser.email;
     const applyStudentProfile = (profile: AppRecord | null) => {
       if (!profile) {
         return;
@@ -284,6 +340,7 @@ export function StudentLearningPage({ view }: { view: string }) {
         return current;
       });
     };
+
     const studentProfileQueries: Unsubscribe[] = [
       onSnapshot(
         doc(db, "students", appUser.uid),
@@ -404,13 +461,14 @@ export function StudentLearningPage({ view }: { view: string }) {
             query(
               collection(db, "lessons"),
               where("teacherId", "==", teacherId),
-              where("status", "==", "published"),
             ),
           );
-          teacherLessons = lessonsSnapshot.docs.map((item) => ({
-            id: item.id,
-            ...item.data(),
-          }));
+          teacherLessons = lessonsSnapshot.docs
+            .map((item): AppRecord => ({
+              id: item.id,
+              ...item.data(),
+            }))
+            .filter((lesson) => String(lesson.status ?? "draft") === "published");
         } catch {
           teacherLessons = [];
         }
@@ -484,12 +542,28 @@ export function StudentLearningPage({ view }: { view: string }) {
     subjectLessons.find((item) => item.id === activeLessonId) ??
     subjectLessons[0];
   const selectedLessonId = selectedLesson?.id ?? lessonId ?? "";
-  const lessonBlocks = useCollectionByField("lessonBlocks", "lessonId", selectedLessonId);
+  const lessonBlocks = useCollectionByField(
+    "lessonBlocks",
+    "lessonId",
+    selectedLessonId,
+  );
   const quizzes = useCollectionByField("quizzes", "lessonId", selectedLessonId);
   const selectedQuiz = quizzes.find((quiz) => quiz.id === quizId) ?? quizzes[0];
-  const quizQuestions = useCollectionByField("quizQuestions", "quizId", selectedQuiz?.id);
-  const quizOptions = useCollectionByField("quizOptions", "quizId", selectedQuiz?.id);
-  const progressRecords = useCollectionByField("studentProgress", "studentId", appUser?.uid);
+  const quizQuestions = useCollectionByField(
+    "quizQuestions",
+    "quizId",
+    selectedQuiz?.id,
+  );
+  const quizOptions = useCollectionByField(
+    "quizOptions",
+    "quizId",
+    selectedQuiz?.id,
+  );
+  const progressRecords = useCollectionByField(
+    "studentProgress",
+    "studentId",
+    appUser?.uid,
+  );
   const publishedLessonBlocks = useMemo(
     () => lessonBlocks.filter((block) => String(block.status ?? "draft") === "published"),
     [lessonBlocks],
@@ -784,6 +858,14 @@ export function StudentLearningPage({ view }: { view: string }) {
 
   return (
     <StudentShell title="المناهج المتاحة" subtitle="المناهج والدروس التي فعلها المعلم لك.">
+      {teacherNames.length ? (
+        <div className="surface flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-bold text-slate-500">المعلم</span>
+          <strong className="text-lg font-black text-slate-950">
+            {teacherNames.join("، ")}
+          </strong>
+        </div>
+      ) : null}
       {!studentProfile ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
           لم يتم العثور على سجل الطالب المرتبط بهذا الحساب بعد. تأكد أن اسم المستخدم في سجل الطالب هو {accountUsername || appUser?.email}.
@@ -820,7 +902,10 @@ export function StudentLearningPage({ view }: { view: string }) {
                   <p className="text-xs font-bold text-learning-blue">{formatGrade(gradeId)}</p>
                   <h2 className="mt-2 text-xl font-black text-slate-950">{subject}</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {subjectLessons.length} درس متاح من معلميك.
+                    {(lessonsBySubject[subject] ?? []).length} درس منشور من معلمك.
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {teacherNames.length ? teacherNames.join("، ") : "المعلم غير محدد"}
                   </p>
                 </div>
                 <BookOpen className="text-learning-blue" size={26} />
@@ -896,9 +981,17 @@ export function StudentLearningPage({ view }: { view: string }) {
                 </div>
                 <LessonBlocks blocks={publishedLessonBlocks} />
                 {quizzes.length ? (
-                  <Link className="btn-primary" to={`/student/quiz?lessonId=${selectedLessonId}&quizId=${quizzes[0].id}`}>
-                    فتح الاختبار
-                  </Link>
+                  <div className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-learning-blue">الاختبار</p>
+                      <h3 className="mt-1 text-lg font-black text-slate-950">
+                        {formatCellValue(quizzes[0].title ?? "اختبار الدرس")}
+                      </h3>
+                    </div>
+                    <Link className="btn-primary" to={`/student/quiz?lessonId=${selectedLessonId}&quizId=${quizzes[0].id}`}>
+                      فتح الاختبار
+                    </Link>
+                  </div>
                 ) : null}
               </section>
             ) : null}
@@ -930,6 +1023,17 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
                 alt={String(block.title ?? "صورة الدرس")}
               />
             ) : null}
+            {block.type === "youtube" && youtubeEmbedUrl(block.url) ? (
+              <div className="mt-3 aspect-video overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+                <iframe
+                  className="h-full w-full"
+                  src={youtubeEmbedUrl(block.url)}
+                  title={String(block.title ?? "YouTube")}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : null}
             {block.type === "text" ? (
               <div
                 className="prose prose-sm mt-2 max-w-none text-right leading-8 text-slate-600"
@@ -941,7 +1045,7 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
                 {formatCellValue(block.content)}
               </p>
             )}
-            {block.url && block.type !== "image" ? (
+            {block.url && block.type !== "image" && block.type !== "youtube" ? (
               <a
                 className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-learning-blue"
                 href={String(block.url)}

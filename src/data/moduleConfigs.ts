@@ -121,6 +121,11 @@ const specializationSeeds = palestinianTeacherSpecializations.map((name, index) 
   order: index + 1,
 }));
 
+const specializationOptions = palestinianTeacherSpecializations.map((name) => ({
+  label: name,
+  value: name,
+}));
+
 const stageSeeds = [
   { name: "المرحلة الأساسية الدنيا", description: "من الصف الأول إلى الرابع", order: 1, status: "active" },
   { name: "المرحلة الأساسية العليا", description: "من الصف الخامس إلى العاشر", order: 2, status: "active" },
@@ -182,7 +187,8 @@ const allModuleConfigs: ModuleConfig[] = [
         key: "specializationId",
         label: "التخصص",
         type: "select",
-        reference: { collection: "specializations", labelKey: "name" },
+        options: specializationOptions,
+        required: true,
       },
       { key: "whatsappNumber", label: "رقم الواتس", type: "tel" },
       { key: "email", label: "البريد الإلكتروني", type: "email" },

@@ -82,7 +82,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           className={`${mobileOpen ? "block" : "hidden"} lg:block`}
           aria-label="القائمة الرئيسية"
         >
-          <nav className="surface max-h-[calc(100vh-6.5rem)] space-y-4 overflow-y-auto p-3">
+          <nav className="surface space-y-4 p-3 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             {visibleGroups.map((group) => (
               <div key={group.title}>
                 <p className="px-2 pb-2 text-xs font-black text-slate-400">

@@ -1096,9 +1096,9 @@ export function LessonBuilderPage() {
                   <div
                     className="form-input min-h-32 text-right leading-8"
                     dir="rtl"
+                    style={{ unicodeBidi: "plaintext" }}
                     contentEditable
                     suppressContentEditableWarning
-                    onInput={(event) => setBlockContent(event.currentTarget.innerHTML)}
                     onBlur={(event) => setBlockContent(event.currentTarget.innerHTML)}
                     dangerouslySetInnerHTML={{ __html: blockContent }}
                   />
