@@ -262,6 +262,18 @@ export function StudentLearningPage({ view }: { view: string }) {
     track,
     showTrack,
   );
+  const teacherProfileSubjects = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          teacherProfiles
+            .flatMap((teacher) => getRecordStringArray(teacher, "teachingSubjects"))
+            .map((subject) => subject.trim())
+            .filter(Boolean),
+        ),
+      ),
+    [teacherProfiles],
+  );
   const publishedTeacherLessonSubjects = useMemo(
     () =>
       Array.from(
@@ -283,12 +295,23 @@ export function StudentLearningPage({ view }: { view: string }) {
   const availableSubjects = useMemo(() => {
     const gradeSubjects = getSubjectsForGrade(gradeId, showTrack ? track : "");
     const subjects = Array.from(
-      new Set([...assignedSubjects, ...publishedTeacherLessonSubjects]),
+      new Set([
+        ...assignedSubjects,
+        ...teacherProfileSubjects,
+        ...publishedTeacherLessonSubjects,
+      ]),
     );
     return subjects.filter(
       (subject) => gradeSubjects.includes(subject) || publishedTeacherLessonSubjects.includes(subject),
     );
-  }, [assignedSubjects, gradeId, publishedTeacherLessonSubjects, showTrack, track]);
+  }, [
+    assignedSubjects,
+    gradeId,
+    publishedTeacherLessonSubjects,
+    showTrack,
+    teacherProfileSubjects,
+    track,
+  ]);
   const requestedLesson = lessonId
     ? lessons.find((lesson) => lesson.id === lessonId)
     : undefined;

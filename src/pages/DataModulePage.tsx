@@ -404,7 +404,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       curriculumSubjects: Array.isArray(current.curriculumSubjects) &&
         current.curriculumSubjects.some((item) => teacherSubjects.includes(String(item)))
         ? current.curriculumSubjects
-        : teacherSubjects.slice(0, 1),
+        : teacherSubjects,
       curriculumSubject: teacherSubjects.includes(String(current.curriculumSubject ?? ""))
         ? current.curriculumSubject
         : teacherSubjects[0] ?? "",
@@ -426,7 +426,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       defaults.gradeId = gradeId;
       defaults.track = track;
-      defaults.curriculumSubjects = teacherSubjects.slice(0, 1);
+      defaults.curriculumSubjects = teacherSubjects;
       defaults.curriculumSubject = teacherSubjects[0] ?? "";
     }
 
@@ -484,7 +484,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
         payload.curriculumSubjects = selectedStudentSubjects.length
           ? selectedStudentSubjects
-          : teacherSubjects.slice(0, 1);
+          : teacherSubjects;
         payload.curriculumSubject = String(
           (payload.curriculumSubjects as string[])[0] ?? teacherSubjects[0] ?? "",
         );
