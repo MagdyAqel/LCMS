@@ -171,7 +171,11 @@ function getVisibleFormFields(
       return requiresTrack(values.gradeId);
     }
 
-    if (field.key === "curriculumSubject" || field.key === "teachingSubjects") {
+    if (
+      field.key === "curriculumSubject" ||
+      field.key === "curriculumSubjects" ||
+      field.key === "teachingSubjects"
+    ) {
       const gradeId = String(values.gradeId ?? "");
       const track = String(values.track ?? "");
       return Boolean(gradeId) && (!requiresTrack(gradeId) || Boolean(track));
@@ -182,7 +186,11 @@ function getVisibleFormFields(
 }
 
 function getDynamicFieldOptions(field: FormField, values: Record<string, unknown>) {
-  if (field.key !== "curriculumSubject" && field.key !== "teachingSubjects") {
+  if (
+    field.key !== "curriculumSubject" &&
+    field.key !== "curriculumSubjects" &&
+    field.key !== "teachingSubjects"
+  ) {
     return null;
   }
 
@@ -393,6 +401,10 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       ...current,
       gradeId: teacherGradeId,
       track: teacherTrack,
+      curriculumSubjects: Array.isArray(current.curriculumSubjects) &&
+        current.curriculumSubjects.some((item) => teacherSubjects.includes(String(item)))
+        ? current.curriculumSubjects
+        : teacherSubjects.slice(0, 1),
       curriculumSubject: teacherSubjects.includes(String(current.curriculumSubject ?? ""))
         ? current.curriculumSubject
         : teacherSubjects[0] ?? "",
@@ -414,6 +426,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
 
       defaults.gradeId = gradeId;
       defaults.track = track;
+      defaults.curriculumSubjects = teacherSubjects.slice(0, 1);
       defaults.curriculumSubject = teacherSubjects[0] ?? "";
     }
 
@@ -463,9 +476,18 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
         payload.gradeId = teacherGradeId;
         payload.track = teacherTrack;
 
-        if (!teacherSubjects.includes(String(payload.curriculumSubject ?? ""))) {
-          payload.curriculumSubject = teacherSubjects[0] ?? "";
-        }
+        const selectedStudentSubjects = uniqueStrings(
+          Array.isArray(payload.curriculumSubjects)
+            ? payload.curriculumSubjects
+            : [payload.curriculumSubject],
+        ).filter((subject) => teacherSubjects.includes(subject));
+
+        payload.curriculumSubjects = selectedStudentSubjects.length
+          ? selectedStudentSubjects
+          : teacherSubjects.slice(0, 1);
+        payload.curriculumSubject = String(
+          (payload.curriculumSubjects as string[])[0] ?? teacherSubjects[0] ?? "",
+        );
       }
 
       if (!editing && managedRole) {
@@ -495,16 +517,22 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
       if (config.collection === "students") {
         payload.status = String(payload.status ?? "") || "active";
         const allowedSubjects = getSubjectsForGrade(payload.gradeId, payload.track);
-        if (!payload.curriculumSubject) {
-          throw new Error("اختر المنهاج المرتبط بصف الطالب قبل الحفظ.");
+        const selectedStudentSubjects = uniqueStrings(
+          Array.isArray(payload.curriculumSubjects)
+            ? payload.curriculumSubjects
+            : [payload.curriculumSubject],
+        );
+
+        if (!selectedStudentSubjects.length) {
+          throw new Error("اختر منهاجًا واحدًا على الأقل مرتبطًا بصف الطالب قبل الحفظ.");
         }
 
-        if (
-          payload.curriculumSubject &&
-          !allowedSubjects.includes(String(payload.curriculumSubject))
-        ) {
+        if (selectedStudentSubjects.some((subject) => !allowedSubjects.includes(subject))) {
           throw new Error("المنهاج المختار لا يتبع صف الطالب. اختر منهاجًا من القائمة بعد تحديد الصف.");
         }
+
+        payload.curriculumSubjects = selectedStudentSubjects;
+        payload.curriculumSubject = selectedStudentSubjects[0];
       }
 
       if (config.collection === "teachers") {
@@ -934,7 +962,7 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
               const options =
                 config.collection === "students" &&
                 appUser?.role === "teacher" &&
-                field.key === "curriculumSubject" &&
+                (field.key === "curriculumSubject" || field.key === "curriculumSubjects") &&
                 teacherStudentSubjects.length
                   ? baseOptions.filter((option) =>
                       teacherStudentSubjects.includes(option.value),
@@ -1036,15 +1064,15 @@ export function DataModulePage({ config }: { config: ModuleConfig }) {
                           ...(field.key === "gradeId" &&
                           event.target.value !== "11" &&
                           event.target.value !== "12"
-                            ? { track: "", curriculumSubject: "", teachingSubjects: [] }
+                            ? { track: "", curriculumSubject: "", curriculumSubjects: [], teachingSubjects: [] }
                             : {}),
                           ...(field.key === "gradeId" &&
                           (event.target.value === "11" ||
                             event.target.value === "12")
-                            ? { curriculumSubject: "", teachingSubjects: [] }
+                            ? { curriculumSubject: "", curriculumSubjects: [], teachingSubjects: [] }
                             : {}),
                           ...(field.key === "track"
-                            ? { curriculumSubject: "", teachingSubjects: [] }
+                            ? { curriculumSubject: "", curriculumSubjects: [], teachingSubjects: [] }
                             : {}),
                         }))
                       }

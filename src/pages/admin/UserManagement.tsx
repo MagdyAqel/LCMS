@@ -1,12 +1,12 @@
-import { Ban, CheckCircle2, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { Ban, CheckCircle2, Edit3, Plus, RefreshCw, Save, ShieldCheck, Users, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { RoleBadge } from "../../components/RoleBadge";
 import { useAuth } from "../../context/AuthContext";
 import { createManagedAccount } from "../../services/accounts";
-import { getDemoUsers, isDemoUser } from "../../services/demoAuth";
 import {
   subscribeToUsers,
   updateUserDisabled,
+  updateUserProfile,
   updateUserRole,
 } from "../../services/users";
 import type { AppUser, UserRole } from "../../types";
@@ -26,6 +26,11 @@ export function UserManagement() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [savingUid, setSavingUid] = useState<string | null>(null);
+  const [editingUid, setEditingUid] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState({
+    displayName: "",
+    contactEmail: "",
+  });
   const [filter, setFilter] = useState<UserRole | "all">("all");
   const [newUser, setNewUser] = useState({
     displayName: "",
@@ -36,14 +41,11 @@ export function UserManagement() {
     role: "admin" as UserRole,
   });
 
+  const passwordMismatch =
+    newUser.confirmPassword.length > 0 && newUser.password !== newUser.confirmPassword;
+
   useEffect(() => {
     if (!appUser) {
-      return;
-    }
-
-    if (isDemoUser(appUser)) {
-      setUsers(getDemoUsers());
-      setLoading(false);
       return;
     }
 
@@ -70,11 +72,6 @@ export function UserManagement() {
   }, [filter, users]);
 
   async function handleRoleChange(uid: string, role: UserRole) {
-    if (isDemoUser(appUser)) {
-      setError("تعديل أدوار الحسابات المحلية غير متاح. أنشئ حسابًا جديدًا بالدور المطلوب.");
-      return;
-    }
-
     setSavingUid(uid);
     setError(null);
 
@@ -88,11 +85,6 @@ export function UserManagement() {
   }
 
   async function handleDisabledChange(uid: string, disabled: boolean) {
-    if (isDemoUser(appUser)) {
-      setError("إيقاف الحسابات المحلية غير متاح من هذه الصفحة.");
-      return;
-    }
-
     setSavingUid(uid);
     setError(null);
 
@@ -144,15 +136,38 @@ export function UserManagement() {
         role: "admin",
       });
 
-      if (isDemoUser(appUser)) {
-        setUsers(getDemoUsers());
-      }
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "تعذر إنشاء المستخدم. راجع اسم المستخدم وكلمة المرور والصلاحيات.",
       );
+    } finally {
+      setSavingUid(null);
+    }
+  }
+
+  function startEditUser(user: AppUser) {
+    setEditingUid(user.uid);
+    setEditUser({
+      displayName: user.displayName,
+      contactEmail: user.contactEmail ?? "",
+    });
+    setError(null);
+    setNotice(null);
+  }
+
+  async function handleSaveUser(uid: string) {
+    setSavingUid(uid);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await updateUserProfile(uid, editUser);
+      setNotice("تم تحديث بيانات المستخدم بنجاح.");
+      setEditingUid(null);
+    } catch {
+      setError("تعذر تحديث بيانات المستخدم. تأكد من الصلاحيات.");
     } finally {
       setSavingUid(null);
     }
@@ -276,6 +291,11 @@ export function UserManagement() {
               }
               required
             />
+            {passwordMismatch ? (
+              <span className="text-xs font-bold text-red-600">
+                كلمة المرور وتأكيدها غير متطابقين.
+              </span>
+            ) : null}
           </label>
           <label className="block space-y-2">
             <span className="form-label">الدور</span>
@@ -317,6 +337,88 @@ export function UserManagement() {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="surface p-5">
+        <div className="mb-5">
+          <h2 className="text-lg font-black text-slate-950">تعديل بيانات مستخدم</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            اختر مسؤولًا أو معلمًا أو طالبًا لتعديل الاسم والبريد الحقيقي.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="block space-y-2">
+            <span className="form-label">المستخدم</span>
+            <select
+              className="form-input"
+              value={editingUid ?? ""}
+              onChange={(event) => {
+                const user = users.find((item) => item.uid === event.target.value);
+                if (user) {
+                  startEditUser(user);
+                } else {
+                  setEditingUid(null);
+                }
+              }}
+            >
+              <option value="">اختر مستخدمًا</option>
+              {users.map((user) => (
+                <option key={user.uid} value={user.uid}>
+                  {user.displayName} - {user.username ? `@${user.username}` : user.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">الاسم الكامل</span>
+            <input
+              className="form-input"
+              value={editUser.displayName}
+              disabled={!editingUid}
+              onChange={(event) =>
+                setEditUser((current) => ({
+                  ...current,
+                  displayName: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="form-label">البريد الحقيقي</span>
+            <input
+              className="form-input"
+              type="email"
+              value={editUser.contactEmail}
+              disabled={!editingUid}
+              onChange={(event) =>
+                setEditUser((current) => ({
+                  ...current,
+                  contactEmail: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <div className="flex items-end gap-2 md:col-span-3">
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={!editingUid || savingUid === editingUid}
+              onClick={() => editingUid && handleSaveUser(editingUid)}
+            >
+              <Save size={18} aria-hidden="true" />
+              حفظ التعديل
+            </button>
+            <button
+              className="btn-secondary"
+              type="button"
+              disabled={!editingUid}
+              onClick={() => setEditingUid(null)}
+            >
+              <X size={18} aria-hidden="true" />
+              إلغاء
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="surface overflow-hidden">

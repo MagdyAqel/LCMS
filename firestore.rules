@@ -154,7 +154,7 @@ service cloud.firestore {
           signedIn()
           && request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["displayName", "photoURL", "updatedAt"])
+            .hasOnly(["displayName", "contactEmail", "photoURL", "updatedAt"])
         )
         || (
           signedIn()
@@ -195,17 +195,20 @@ service cloud.firestore {
     match /teachers/{teacherId} {
       allow read: if isAdmin()
         || isOwner(resource.data.userId)
+        || (isTeacher() && teacherId == request.auth.uid)
         || (
           isStudent()
           && currentUser().data.username is string
           && get(/databases/$(database)/documents/usernames/$(currentUser().data.username))
             .data.createdBy == teacherId
         );
-      allow list, create, update, delete: if isAdmin();
+      allow list, create, delete: if isAdmin();
+      allow update: if isAdmin() || (isTeacher() && teacherId == request.auth.uid);
     }
 
     match /students/{studentId} {
       allow read: if isAdmin()
+        || isTeacher()
         || (isStudent() && studentId == request.auth.uid)
         || isOwner(resource.data.userId)
         || isOwner(resource.data.studentId)
@@ -265,6 +268,21 @@ service cloud.firestore {
         || studentCanReadAssignedRecord();
       allow create: if isAdmin() || createsTeacherOwned();
       allow update, delete: if isAdmin() || isTeacherOwner();
+    }
+
+    match /studentGroups/{groupId} {
+      allow read: if isAdmin()
+        || (
+          isTeacher()
+          && resource.data.teacherIds is list
+          && request.auth.uid in resource.data.teacherIds
+        )
+        || (
+          isStudent()
+          && resource.data.studentIds is list
+          && request.auth.uid in resource.data.studentIds
+        );
+      allow create, update, delete: if isAdmin();
     }
 
     match /courseStudents/{courseStudentId} {

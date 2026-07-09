@@ -15,6 +15,8 @@ import { getModuleConfig } from "./data/moduleConfigs";
 import { ReportsPage } from "./pages/ReportsPage";
 import { StudentLearningPage } from "./pages/student/StudentLearningPage";
 import { LessonBuilderPage } from "./pages/teacher/LessonBuilderPage";
+import { ProfileSettingsPage } from "./pages/ProfileSettingsPage";
+import { AdminEmailPage } from "./pages/admin/AdminEmailPage";
 
 function WithLayout({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
@@ -78,6 +80,14 @@ export default function App() {
             </WithLayout>
           }
         />
+        <Route
+          path="/admin/email"
+          element={
+            <WithLayout>
+              <AdminEmailPage />
+            </WithLayout>
+          }
+        />
         {adminModules.map((module) => (
           <Route
             key={module.path}
@@ -92,6 +102,14 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={["teacher"]} />}>
+        <Route
+          path="/teacher/profile"
+          element={
+            <WithLayout>
+              <ProfileSettingsPage />
+            </WithLayout>
+          }
+        />
         {teacherModules.map((module) => (
           <Route
             key={module.path}

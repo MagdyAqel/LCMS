@@ -77,6 +77,15 @@ const allAdminModules: SpecModule[] = [
     actions: ["إضافة معلم", "تعديل البيانات", "تعطيل الحساب", "مراجعة المناهج المرتبطة"],
   },
   {
+    path: "/admin/student-groups",
+    title: "مجموعة طلبة خاصة",
+    eyebrow: "Admin",
+    collection: "studentGroups",
+    description: "إنشاء مجموعات طلبة خاصة وربطها بأكثر من معلم، مع إمكانية إضافة الطلاب أو استيراد بياناتهم.",
+    fields: ["اسم المجموعة", "الطلاب", "المعلمون", "الصف", "المناهج", "الحالة"],
+    actions: ["إضافة مجموعة", "تعديل المجموعة", "ربط الطلاب", "ربط أكثر من معلم"],
+  },
+  {
     path: "/admin/specializations",
     title: "إدارة التخصصات",
     eyebrow: "Admin",
@@ -415,6 +424,7 @@ const rawRoleNavigation: Record<UserRole, NavGroup[]> = {
       items: [
         { label: "لوحة التحكم", to: "/dashboard", roles: ["admin"] },
         { label: "المستخدمون", to: "/admin/users", roles: ["admin"] },
+        { label: "بريد المعلمين", to: "/admin/email", roles: ["admin"] },
       ],
     },
     {
@@ -437,7 +447,10 @@ const rawRoleNavigation: Record<UserRole, NavGroup[]> = {
   teacher: [
     {
       title: "الرئيسية",
-      items: [{ label: "لوحة التحكم", to: "/dashboard", roles: ["teacher"] }],
+      items: [
+        { label: "لوحة التحكم", to: "/dashboard", roles: ["teacher"] },
+        { label: "الملف الشخصي", to: "/teacher/profile", roles: ["teacher"] },
+      ],
     },
     {
       title: "الطلاب والمناهج",
@@ -522,6 +535,7 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
       items: [
         { label: "لوحة التحكم", to: "/dashboard", roles: ["admin"] },
         { label: "المستخدمون", to: "/admin/users", roles: ["admin"] },
+        { label: "بريد المعلمين", to: "/admin/email", roles: ["admin"] },
       ],
     },
     {
@@ -536,7 +550,10 @@ export const roleNavigation: Record<UserRole, NavGroup[]> = {
   teacher: [
     {
       title: "الرئيسية",
-      items: [{ label: "لوحة التحكم", to: "/dashboard", roles: ["teacher"] }],
+      items: [
+        { label: "لوحة التحكم", to: "/dashboard", roles: ["teacher"] },
+        { label: "الملف الشخصي", to: "/teacher/profile", roles: ["teacher"] },
+      ],
     },
     {
       title: "الطلاب والمناهج",

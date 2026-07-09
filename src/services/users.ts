@@ -109,15 +109,39 @@ export function subscribeToUsers(
 }
 
 export async function updateUserRole(uid: string, role: UserRole) {
-  await updateDoc(userDocumentRef(uid), {
+  const ref = userDocumentRef(uid);
+  const snapshot = await getDoc(ref);
+  await updateDoc(ref, {
     role,
     updatedAt: serverTimestamp(),
   });
+
+  const username = snapshot.exists() ? String(snapshot.data().username ?? "") : "";
+  if (username) {
+    await updateDoc(doc(db, "usernames", username), {
+      role,
+      updatedAt: serverTimestamp(),
+    });
+  }
 }
 
 export async function updateUserDisabled(uid: string, disabled: boolean) {
   await updateDoc(userDocumentRef(uid), {
     disabled,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateUserProfile(
+  uid: string,
+  data: {
+    displayName?: string;
+    contactEmail?: string;
+    photoURL?: string | null;
+  },
+) {
+  await updateDoc(userDocumentRef(uid), {
+    ...data,
     updatedAt: serverTimestamp(),
   });
 }
