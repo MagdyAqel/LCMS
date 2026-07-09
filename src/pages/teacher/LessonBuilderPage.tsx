@@ -1148,7 +1148,9 @@ export function LessonBuilderPage({ mode = "lesson" }: { mode?: "lesson" | "quiz
                     ) : null}
                     {block.type === "text" ? (
                       <div
-                        className="prose prose-sm mt-2 max-w-none text-slate-600"
+                        className="lesson-rich-text mt-3 max-w-none text-right leading-8"
+                        dir="rtl"
+                        style={{ unicodeBidi: "plaintext" }}
                         dangerouslySetInnerHTML={{ __html: String(block.content ?? "") }}
                       />
                     ) : (

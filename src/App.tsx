@@ -128,6 +128,22 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={["student"]} />}>
+        <Route
+          path="/student/course-detail"
+          element={
+            <WithLayout>
+              <StudentModule path="/student/course-detail" />
+            </WithLayout>
+          }
+        />
+        <Route
+          path="/student/lesson"
+          element={
+            <WithLayout>
+              <StudentModule path="/student/lesson" />
+            </WithLayout>
+          }
+        />
         {studentModules.map((module) => (
           <Route
             key={module.path}

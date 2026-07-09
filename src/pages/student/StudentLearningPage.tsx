@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   collection,
   doc,
@@ -289,7 +289,14 @@ export function StudentLearningPage({ view }: { view: string }) {
       (subject) => gradeSubjects.includes(subject) || publishedTeacherLessonSubjects.includes(subject),
     );
   }, [assignedSubjects, gradeId, publishedTeacherLessonSubjects, showTrack, track]);
-  const selectedSubject = activeSubject || availableSubjects[0] || "";
+  const requestedLesson = lessonId
+    ? lessons.find((lesson) => lesson.id === lessonId)
+    : undefined;
+  const selectedSubject =
+    activeSubject ||
+    String(requestedLesson?.subject ?? "") ||
+    availableSubjects[0] ||
+    "";
   const lessonsBySubject = useMemo(
     () =>
       availableSubjects.reduce<Record<string, AppRecord[]>>((groups, subject) => {
@@ -565,7 +572,7 @@ export function StudentLearningPage({ view }: { view: string }) {
     [assignedTeacherIds, gradeId, lessons, selectedSubject, showTrack, track],
   );
   const selectedLesson =
-    subjectLessons.find((item) => item.id === (lessonId ?? activeLessonId)) ??
+    (lessonId ? lessons.find((item) => item.id === lessonId) : undefined) ??
     subjectLessons.find((item) => item.id === activeLessonId) ??
     subjectLessons[0];
   const selectedLessonId = selectedLesson?.id ?? lessonId ?? "";
@@ -900,6 +907,42 @@ export function StudentLearningPage({ view }: { view: string }) {
     );
   }
 
+  if (view === "course-detail" || view === "lesson") {
+    return (
+      <StudentShell
+        title={formatCellValue(selectedLesson?.title ?? "عرض الدرس")}
+        subtitle="صفحة مستقلة لعرض عناصر الدرس حسب ترتيب المعلم."
+      >
+        <div className="surface grid gap-3 p-5 sm:grid-cols-3">
+          <MiniMetric label="المعلم" value={teacherNames.length ? teacherNames.join("، ") : "لا يوجد"} />
+          <MiniMetric label="المنهاج" value={formatCellValue(selectedLesson?.subject ?? selectedSubject)} />
+          <MiniMetric label="الصف" value={formatGrade(gradeId)} />
+        </div>
+
+        {selectedLesson ? (
+          <section className="space-y-4">
+            <div className="surface p-5">
+              <p className="text-xs font-bold text-learning-blue">
+                الدرس {formatCellValue(selectedLesson.order)}
+              </p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">
+                {formatCellValue(selectedLesson.title)}
+              </h2>
+              {selectedLesson.objectives ? (
+                <p className="mt-2 text-sm leading-7 text-slate-500">
+                  {formatCellValue(selectedLesson.objectives)}
+                </p>
+              ) : null}
+            </div>
+            <LessonBlocks blocks={publishedLessonBlocks} />
+          </section>
+        ) : (
+          <EmptyState text="لم يتم العثور على الدرس المطلوب أو أنه غير متاح لهذا الحساب." />
+        )}
+      </StudentShell>
+    );
+  }
+
   if (view === "result") {
     return (
       <StudentShell title="نتائج الاختبارات" subtitle="درجات ومحاولات الطالب.">
@@ -980,18 +1023,9 @@ export function StudentLearningPage({ view }: { view: string }) {
 
             <div className="grid gap-3 md:grid-cols-2">
               {subjectLessons.map((lesson) => (
-                <button
+                <article
                   key={lesson.id}
-                  className={`surface p-5 text-right ${
-                    lesson.id === selectedLesson?.id ? "ring-2 ring-learning-blue" : ""
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                  type="button"
-                  disabled={!canOpenLesson(lesson)}
-                  onClick={() => {
-                    if (canOpenLesson(lesson)) {
-                      setActiveLessonId(lesson.id);
-                    }
-                  }}
+                  className="surface p-5 text-right"
                 >
                   <p className="text-xs font-bold text-slate-400">
                     الدرس {formatCellValue(lesson.order)}
@@ -1015,7 +1049,21 @@ export function StudentLearningPage({ view }: { view: string }) {
                       </span>
                     ) : null}
                   </div>
-                </button>
+                  <div className="mt-4">
+                    {canOpenLesson(lesson) ? (
+                      <Link
+                        className="btn-primary"
+                        to={`/student/course-detail?lessonId=${lesson.id}`}
+                      >
+                        فتح الدرس
+                      </Link>
+                    ) : (
+                      <button className="btn-secondary" type="button" disabled>
+                        الدرس مقفل
+                      </button>
+                    )}
+                  </div>
+                </article>
               ))}
             </div>
 
@@ -1023,7 +1071,7 @@ export function StudentLearningPage({ view }: { view: string }) {
               <EmptyState text="لا توجد دروس منشورة لهذا المنهاج بعد." />
             ) : null}
 
-            {selectedLesson ? (
+            {false && selectedLesson ? (
               <section className="space-y-3">
                 <div className="surface p-5">
                   <p className="text-xs font-bold text-learning-blue">عرض الدرس</p>
@@ -1075,8 +1123,9 @@ function LessonBlocks({ blocks }: { blocks: AppRecord[] }) {
             ) : null}
             {block.type === "text" ? (
               <div
-                className="prose prose-sm mt-2 max-w-none text-right leading-8 text-slate-600"
+                className="lesson-rich-text mt-3 max-w-none text-right leading-8"
                 dir="rtl"
+                style={{ unicodeBidi: "plaintext" }}
                 dangerouslySetInnerHTML={{ __html: String(block.content ?? "") }}
               />
             ) : (
