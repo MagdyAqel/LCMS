@@ -1,6 +1,5 @@
-import { BookOpen, Download, ShieldCheck, Upload, Users } from "lucide-react";
+import { BookOpen, Download, ShieldCheck, Upload } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { StatCard } from "../../components/StatCard";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -62,11 +61,10 @@ export function AdminDashboard() {
       <section>
         <p className="text-sm font-bold text-learning-blue">Admin</p>
         <h1 className="mt-2 text-3xl font-black text-slate-950">
-          أهلاً، {appUser?.displayName}
+          أهلا، {appUser?.displayName}
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          تستطيع إدارة المستخدمين، مراجعة المساقات، وضبط الصلاحيات الأساسية
-          للنظام.
+          راقب مناهج المعلمين، النسخ الاحتياطي، وصلاحيات النظام من مكان واحد.
         </p>
       </section>
 
@@ -82,23 +80,17 @@ export function AdminDashboard() {
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2">
         <StatCard
-          label="المستخدمون"
-          value="Roles"
-          helper="إسناد Admin وTeacher وStudent"
-          icon={<Users size={21} aria-hidden="true" />}
-        />
-        <StatCard
-          label="المساقات"
+          label="المناهج"
           value="Courses"
-          helper="إدارة المحتوى والمنشورات التعليمية"
+          helper="تفعيل مناهج المعلمين وتحديد فترة الإتاحة من إدارة مناهج المعلمين."
           icon={<BookOpen size={21} aria-hidden="true" />}
         />
         <StatCard
           label="الصلاحيات"
           value="Rules"
-          helper="حماية Firestore حسب الدور"
+          helper="حماية Firestore حسب الدور والعلاقات بين المعلم والطالب."
           icon={<ShieldCheck size={21} aria-hidden="true" />}
         />
       </section>
@@ -111,7 +103,7 @@ export function AdminDashboard() {
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
               تصدير واستيراد بيانات Firestore الخاصة بالنظام. حسابات Firebase Auth
-              تُدار من صفحة المستخدمين ولا تُصدّر كلمات مرورها.
+              تدار من صفحة المستخدمين ولا يتم تصدير كلمات مرورها.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -137,23 +129,6 @@ export function AdminDashboard() {
               />
             </label>
           </div>
-        </div>
-      </section>
-
-      <section className="surface p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-black text-slate-950">
-              إدارة المستخدمين
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              غيّر دور المستخدم أو أوقف وصوله من مكان واحد.
-            </p>
-          </div>
-          <Link className="btn-primary" to="/admin/users">
-            <Users size={18} aria-hidden="true" />
-            فتح المستخدمين
-          </Link>
         </div>
       </section>
     </div>
