@@ -16,7 +16,6 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { StudentLearningPage } from "./pages/student/StudentLearningPage";
 import { LessonBuilderPage } from "./pages/teacher/LessonBuilderPage";
 import { ProfileSettingsPage } from "./pages/ProfileSettingsPage";
-import { AdminEmailPage } from "./pages/admin/AdminEmailPage";
 
 function WithLayout({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
@@ -81,14 +80,6 @@ export default function App() {
           element={
             <WithLayout>
               <UserManagement />
-            </WithLayout>
-          }
-        />
-        <Route
-          path="/admin/email"
-          element={
-            <WithLayout>
-              <AdminEmailPage />
             </WithLayout>
           }
         />
